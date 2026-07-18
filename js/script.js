@@ -29,7 +29,8 @@
     })[c]);
   const clamp = (v, min, max) => Math.min(max, Math.max(min, v));
 
-  const WEEKDAYS_KO = ['일', '월', '화', '수', '목', '금', '토'];
+  const WEEKDAYS_EN = ['Sunday', 'Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday'];
+  const MONTHS_EN = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
   function addDaysToDateStr(dateStr, days) {
     const [y, m, d] = dateStr.split('-').map(Number);
     const dt = new Date(y, m - 1, d);
@@ -42,7 +43,7 @@
   function formatDateLabel(dateStr) {
     const [y, m, d] = dateStr.split('-').map(Number);
     const dt = new Date(y, m - 1, d);
-    return { date: `${m}월 ${d}일`, weekday: WEEKDAYS_KO[dt.getDay()] + '요일' };
+    return { date: `${MONTHS_EN[m - 1]} ${d}`, weekday: WEEKDAYS_EN[dt.getDay()] };
   }
 
   function loadState() {
@@ -64,7 +65,7 @@
         diary: Array.isArray(parsed.diary) ? parsed.diary : []
       };
     } catch (e) {
-      console.warn('저장된 데이터를 불러오지 못했어요. 기본값으로 시작합니다.', e);
+      console.warn('Could not load saved data. Starting with defaults.', e);
       return structuredCloneState(defaultState);
     }
   }
@@ -80,7 +81,7 @@
       localStorage.setItem(STORAGE_KEY, JSON.stringify(state));
     } catch (e) {
       if (e && (e.name === 'QuotaExceededError' || e.code === 22)) {
-        alert('저장 공간이 가득 찼어요. 사진 크기를 줄이거나 오래된 기록을 삭제해주세요.');
+        alert('Storage is full. Try a smaller photo or delete some older entries.');
       } else {
         console.error(e);
       }
@@ -91,10 +92,10 @@
   function resizeImageFile(file, maxDim, quality) {
     return new Promise((resolve, reject) => {
       const reader = new FileReader();
-      reader.onerror = () => reject(new Error('파일을 읽지 못했어요.'));
+      reader.onerror = () => reject(new Error('Could not read the file.'));
       reader.onload = () => {
         const img = new Image();
-        img.onerror = () => reject(new Error('이미지를 불러오지 못했어요.'));
+        img.onerror = () => reject(new Error('Could not load the image.'));
         img.onload = () => {
           let { width, height } = img;
           if (width > maxDim || height > maxDim) {
@@ -183,7 +184,7 @@
   }
 
   function renderProfile() {
-    profileNameEl.textContent = state.profile.name.trim() || '이름을 설정해주세요';
+    profileNameEl.textContent = state.profile.name.trim() || 'Set your name';
     if (state.profile.photo) {
       if (avatarImg.getAttribute('src') !== state.profile.photo) {
         avatarImg.src = state.profile.photo;
@@ -238,11 +239,11 @@
       dayEl.dataset.date = dateStr;
       dayEl.innerHTML = `
         <div class="todo-day-header">
-          <span class="todo-day-date">${dateLabel}${dateStr === today ? ' · 오늘' : ''}</span>
+          <span class="todo-day-date">${dateLabel}${dateStr === today ? ' · Today' : ''}</span>
           <span class="todo-day-weekday">${weekday}</span>
         </div>
         <ul class="todo-list"></ul>
-        <p class="empty-msg" style="display:${dayTodos.length ? 'none' : 'block'}">할 일이 없어요.</p>
+        <p class="empty-msg" style="display:${dayTodos.length ? 'none' : 'block'}">No tasks.</p>
       `;
       const listEl = dayEl.querySelector('.todo-list');
       dayTodos.forEach((t) => {
@@ -250,9 +251,9 @@
         li.className = 'todo-item' + (t.done ? ' done' : '');
         li.dataset.id = t.id;
         li.innerHTML = `
-          <button class="todo-check" title="완료 토글">${t.done ? '✓' : ''}</button>
+          <button class="todo-check" title="Toggle done">${t.done ? '✓' : ''}</button>
           <span class="todo-text"></span>
-          <button class="btn-icon todo-delete" title="삭제">✕</button>
+          <button class="btn-icon todo-delete" title="Delete">✕</button>
         `;
         li.querySelector('.todo-text').textContent = t.text;
         listEl.appendChild(li);
@@ -280,7 +281,7 @@
       const t = state.todos.find((x) => x.id === id);
       if (t) { t.done = !t.done; save(); renderTodos(); }
     } else if (e.target.closest('.todo-delete')) {
-      if (!confirm('이 할 일을 삭제할까요?')) return;
+      if (!confirm('Delete this task?')) return;
       state.todos = state.todos.filter((x) => x.id !== id);
       save(); renderTodos();
     }
@@ -332,14 +333,14 @@
           <div style="flex:1; min-width:0;">
             <div class="habit-name-row">
               <div class="habit-name"></div>
-              <button class="btn-icon habit-delete" title="삭제">✕</button>
+              <button class="btn-icon habit-delete" title="Delete">✕</button>
             </div>
           </div>
         </div>
         <div class="progress-bar"><div class="progress-fill" style="width:${pct}%"></div></div>
-        <div class="habit-meta"><span>${successDays} / ${h.goalDays}일</span><span>${pct}%</span></div>
+        <div class="habit-meta"><span>${successDays} / ${h.goalDays} days</span><span>${pct}%</span></div>
         <div class="habit-actions">
-          <button class="btn-check${checkedToday ? ' checked' : ''}">${checkedToday ? '오늘 완료 ✓' : '오늘 완료하기'}</button>
+          <button class="btn-check${checkedToday ? ' checked' : ''}">${checkedToday ? 'Done Today ✓' : 'Mark Today Done'}</button>
         </div>
       `;
       card.querySelector('.habit-name').textContent = h.name;
@@ -367,7 +368,7 @@
     if (!h) return;
 
     if (e.target.closest('.habit-delete')) {
-      if (!confirm(`'${h.name}' 습관을 삭제할까요? 지금까지의 기록도 함께 사라져요.`)) return;
+      if (!confirm(`Delete habit '${h.name}'? All progress will be lost too.`)) return;
       state.habits = state.habits.filter((x) => x.id !== id);
       save(); renderHabits();
       return;
@@ -414,7 +415,7 @@
     });
   });
 
-  const statusLabel = { '예정': '볼 예정', '시청중': '시청 중', '완료': '완료' };
+  const statusLabel = { planned: 'Plan to Watch', watching: 'Watching', completed: 'Completed' };
   const tmdbType = () => (currentArchiveTab === 'movies' ? 'movie' : 'tv');
 
   function clearArchiveSelection() {
@@ -465,24 +466,24 @@
 
   function requestArchiveSearch(query) {
     const seq = ++archiveSearchSeq;
-    archiveSearchStatus.textContent = '검색 중…';
+    archiveSearchStatus.textContent = 'Searching…';
     const endpoint = 'https://api.themoviedb.org/3/search/' + tmdbType();
-    const url = endpoint + '?api_key=' + TMDB_API_KEY + '&language=ko-KR&query=' + encodeURIComponent(query);
+    const url = endpoint + '?api_key=' + TMDB_API_KEY + '&language=en-US&query=' + encodeURIComponent(query);
     fetch(url)
       .then((res) => {
         if (seq !== archiveSearchSeq) return null;
-        if (!res.ok) throw new Error('요청 실패');
+        if (!res.ok) throw new Error('Request failed');
         return res.json();
       })
       .then((data) => {
         if (!data || seq !== archiveSearchSeq) return;
         const results = (data.results || []).slice(0, 10);
-        archiveSearchStatus.textContent = results.length ? '' : '검색 결과가 없어요. 직접 제목을 입력해서 추가할 수 있어요.';
+        archiveSearchStatus.textContent = results.length ? '' : "No results found. You can still add it by typing the title manually.";
         renderArchiveResults(results);
       })
       .catch(() => {
         if (seq !== archiveSearchSeq) return;
-        archiveSearchStatus.textContent = 'TMDB 검색에 실패했어요. 직접 제목을 입력해서 추가할 수 있어요.';
+        archiveSearchStatus.textContent = 'TMDB search failed. You can still add it by typing the title manually.';
         archiveResults.innerHTML = '';
       });
   }
@@ -512,8 +513,8 @@
     const items = state.archive[currentArchiveTab] || [];
     archiveList.innerHTML = '';
     archiveEmpty.textContent = currentArchiveTab === 'movies'
-      ? '등록된 영화가 없어요.'
-      : '등록된 시리즈가 없어요.';
+      ? 'No movies added yet.'
+      : 'No series added yet.';
     archiveEmpty.style.display = items.length ? 'none' : 'block';
 
     items.forEach((item) => {
@@ -531,7 +532,7 @@
               <div class="archive-title"></div>
               ${yearHtml}
             </div>
-            <button class="btn-icon archive-delete" title="삭제">✕</button>
+            <button class="btn-icon archive-delete" title="Delete">✕</button>
           </div>
           <span class="archive-badge">${statusLabel[item.status] || item.status}</span>
           ${stars ? `<div class="archive-rating">${stars}</div>` : ''}
@@ -563,7 +564,7 @@
     });
     archiveSearch.value = '';
     archiveMemo.value = '';
-    archiveStatus.value = '예정';
+    archiveStatus.value = 'planned';
     archiveRating.value = '0';
     clearArchiveSelection();
     archiveResults.innerHTML = '';
@@ -576,7 +577,7 @@
     const card = e.target.closest('.archive-card');
     if (!card || !e.target.closest('.archive-delete')) return;
     const id = card.dataset.id;
-    if (!confirm('이 항목을 삭제할까요?')) return;
+    if (!confirm('Delete this item?')) return;
     state.archive[currentArchiveTab] = state.archive[currentArchiveTab].filter((x) => x.id !== id);
     save();
     renderArchive();
@@ -602,12 +603,12 @@
       card.className = 'diary-card';
       card.dataset.id = entry.id;
       card.innerHTML = `
-        ${entry.photo ? `<img class="diary-card-img" src="${entry.photo}" alt="다이어리 사진">` : ''}
+        ${entry.photo ? `<img class="diary-card-img" src="${entry.photo}" alt="Diary photo">` : ''}
         <div class="diary-card-body">
           <div class="diary-date">${escapeHtml(entry.date)}</div>
           <div class="diary-text"></div>
           <div class="diary-card-footer">
-            <button class="btn-icon diary-delete" title="삭제">✕</button>
+            <button class="btn-icon diary-delete" title="Delete">✕</button>
           </div>
         </div>
       `;
@@ -626,7 +627,7 @@
       try {
         photo = await resizeImageFile(diaryFile.files[0], 1000, 0.8);
       } catch (err) {
-        alert('사진을 처리하지 못했어요: ' + err.message);
+        alert('Could not process the photo: ' + err.message);
       }
     } else if (diaryUrl.value.trim()) {
       photo = diaryUrl.value.trim();
@@ -653,7 +654,7 @@
     const card = e.target.closest('.diary-card');
     if (!card || !e.target.closest('.diary-delete')) return;
     const id = card.dataset.id;
-    if (!confirm('이 기록을 삭제할까요?')) return;
+    if (!confirm('Delete this entry?')) return;
     state.diary = state.diary.filter((x) => x.id !== id);
     save();
     renderDiary();
@@ -703,7 +704,7 @@
       save();
       renderBackground();
     } catch (err) {
-      alert('배경 사진을 처리하지 못했어요: ' + err.message);
+      alert('Could not process the background photo: ' + err.message);
     }
   });
 
@@ -741,7 +742,7 @@
       save();
       renderProfile();
     } catch (err) {
-      alert('프로필 사진을 처리하지 못했어요: ' + err.message);
+      alert('Could not process the profile photo: ' + err.message);
     }
   });
 

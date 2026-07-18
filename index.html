@@ -1,5 +1,5 @@
 <!DOCTYPE html>
-<html lang="ko">
+<html lang="en">
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
@@ -15,27 +15,27 @@
   <aside class="sidebar glass">
     <div class="profile">
       <div class="avatar" id="avatarWrap">
-        <img id="avatarImg" alt="프로필 사진">
+        <img id="avatarImg" alt="Profile photo">
         <span id="avatarPlaceholder">🙂</span>
       </div>
-      <div class="profile-name" id="profileName">이름을 설정해주세요</div>
+      <div class="profile-name" id="profileName">Set your name</div>
     </div>
 
     <nav class="menu">
       <button class="menu-item active" data-section="todo">
-        <span class="menu-icon">✅</span><span>투두리스트</span>
+        <span class="menu-icon">✅</span><span>To-Do List</span>
       </button>
       <button class="menu-item" data-section="habit">
-        <span class="menu-icon">🪴</span><span>해빗트래커</span>
+        <span class="menu-icon">🪴</span><span>Habit Tracker</span>
       </button>
       <button class="menu-item" data-section="archive">
-        <span class="menu-icon">🎬</span><span>아카이브</span>
+        <span class="menu-icon">🎬</span><span>Archive</span>
       </button>
       <button class="menu-item" data-section="diary">
-        <span class="menu-icon">📔</span><span>다이어리</span>
+        <span class="menu-icon">📔</span><span>Diary</span>
       </button>
       <button class="menu-item" data-section="settings">
-        <span class="menu-icon">⚙️</span><span>환경설정</span>
+        <span class="menu-icon">⚙️</span><span>Settings</span>
       </button>
     </nav>
 
@@ -46,63 +46,63 @@
 
     <!-- TODO -->
     <section id="section-todo" class="panel glass active">
-      <h2>투두리스트</h2>
+      <h2>To-Do List</h2>
       <form id="todoForm" class="inline-form">
-        <input type="text" id="todoInput" placeholder="할 일을 입력하세요" required maxlength="200">
+        <input type="text" id="todoInput" placeholder="Add a task" required maxlength="200">
         <input type="date" id="todoDate">
-        <button type="submit" class="btn">추가</button>
+        <button type="submit" class="btn">Add</button>
       </form>
       <div class="todo-nav">
-        <button type="button" id="todoPrev" class="btn-icon" title="이전 3일">‹</button>
-        <button type="button" id="todoToday" class="btn btn-secondary">오늘로 이동</button>
-        <button type="button" id="todoNext" class="btn-icon" title="다음 3일">›</button>
+        <button type="button" id="todoPrev" class="btn-icon" title="Previous 3 days">‹</button>
+        <button type="button" id="todoToday" class="btn btn-secondary">Jump to Today</button>
+        <button type="button" id="todoNext" class="btn-icon" title="Next 3 days">›</button>
       </div>
       <div id="todoDays" class="todo-days"></div>
     </section>
 
     <!-- HABIT -->
     <section id="section-habit" class="panel glass">
-      <h2>해빗트래커 🪴</h2>
+      <h2>Habit Tracker 🪴</h2>
       <form id="habitForm" class="inline-form">
-        <input type="text" id="habitName" placeholder="습관 이름 (예: 아침 물 마시기)" required maxlength="60">
-        <input type="number" id="habitGoal" placeholder="목표일" min="1" max="3650" required class="input-narrow">
-        <button type="submit" class="btn">추가</button>
+        <input type="text" id="habitName" placeholder="Habit name (e.g. Drink water in the morning)" required maxlength="60">
+        <input type="number" id="habitGoal" placeholder="Goal days" min="1" max="3650" required class="input-narrow">
+        <button type="submit" class="btn">Add</button>
       </form>
       <div id="habitList" class="habit-grid"></div>
-      <p id="habitEmpty" class="empty-msg">등록된 습관이 없어요. 키우고 싶은 습관을 심어보세요 🌱</p>
+      <p id="habitEmpty" class="empty-msg">No habits yet. Plant one you'd like to grow 🌱</p>
     </section>
 
     <!-- ARCHIVE -->
     <section id="section-archive" class="panel glass">
-      <h2>아카이브</h2>
+      <h2>Archive</h2>
       <div class="tabs">
-        <button class="tab-btn active" data-tab="movies">🎬 영화</button>
-        <button class="tab-btn" data-tab="series">📺 시리즈</button>
+        <button class="tab-btn active" data-tab="movies">🎬 Movies</button>
+        <button class="tab-btn" data-tab="series">📺 Series</button>
       </div>
       <form id="archiveForm" class="archive-form">
         <div class="archive-search-row">
-          <input type="text" id="archiveSearch" placeholder="작품 제목 검색 (TMDB)" required maxlength="120" autocomplete="off">
+          <input type="text" id="archiveSearch" placeholder="Search title (TMDB)" required maxlength="120" autocomplete="off">
           <select id="archiveStatus">
-            <option value="예정">볼 예정</option>
-            <option value="시청중">시청 중</option>
-            <option value="완료">완료</option>
+            <option value="planned">Plan to Watch</option>
+            <option value="watching">Watching</option>
+            <option value="completed">Completed</option>
           </select>
           <select id="archiveRating">
-            <option value="0">평점 없음</option>
+            <option value="0">No rating</option>
             <option value="1">★☆☆☆☆</option>
             <option value="2">★★☆☆☆</option>
             <option value="3">★★★☆☆</option>
             <option value="4">★★★★☆</option>
             <option value="5">★★★★★</option>
           </select>
-          <button type="submit" class="btn">추가</button>
+          <button type="submit" class="btn">Add</button>
         </div>
-        <input type="text" id="archiveMemo" placeholder="메모 (선택)" maxlength="300">
+        <input type="text" id="archiveMemo" placeholder="Notes (optional)" maxlength="300">
 
         <div id="archiveSelectedChip" class="archive-selected-chip">
           <img id="archiveSelectedPoster" alt="">
           <span id="archiveSelectedLabel"></span>
-          <button type="button" id="archiveSelectedClear" class="btn-icon" title="선택 해제">✕</button>
+          <button type="button" id="archiveSelectedClear" class="btn-icon" title="Clear selection">✕</button>
         </div>
 
         <p id="archiveSearchStatus" class="archive-search-status"></p>
@@ -114,60 +114,60 @@
 
     <!-- DIARY -->
     <section id="section-diary" class="panel glass">
-      <h2>다이어리</h2>
+      <h2>Diary</h2>
       <form id="diaryForm" class="inline-form diary-form">
         <div class="diary-form-row">
           <label class="file-label">
-            📷 사진 선택
+            📷 Choose Photo
             <input type="file" id="diaryFile" accept="image/*">
           </label>
-          <input type="text" id="diaryUrl" placeholder="또는 이미지 URL 입력">
+          <input type="text" id="diaryUrl" placeholder="Or enter an image URL">
           <input type="date" id="diaryDate">
         </div>
-        <textarea id="diaryText" placeholder="오늘의 이야기를 적어보세요" required maxlength="500"></textarea>
-        <button type="submit" class="btn">기록 추가</button>
+        <textarea id="diaryText" placeholder="Write about your day" required maxlength="500"></textarea>
+        <button type="submit" class="btn">Add Entry</button>
       </form>
       <div id="diaryGrid" class="diary-grid"></div>
-      <p id="diaryEmpty" class="empty-msg">아직 작성된 기록이 없어요. 오늘의 순간을 남겨보세요 📸</p>
+      <p id="diaryEmpty" class="empty-msg">No entries yet. Capture today's moment 📸</p>
     </section>
 
     <!-- SETTINGS -->
     <section id="section-settings" class="panel glass">
-      <h2>환경설정</h2>
+      <h2>Settings</h2>
 
       <div class="settings-block">
-        <h3>내 이름</h3>
-        <input type="text" id="settingName" placeholder="이름을 입력하세요" maxlength="30">
+        <h3>My Name</h3>
+        <input type="text" id="settingName" placeholder="Enter your name" maxlength="30">
       </div>
 
       <div class="settings-block">
-        <h3>배경 사진</h3>
+        <h3>Background Photo</h3>
         <div class="settings-row">
           <label class="file-label">
-            🖼️ 파일 업로드
+            🖼️ Upload File
             <input type="file" id="settingBgFile" accept="image/*">
           </label>
-          <input type="text" id="settingBgUrl" placeholder="이미지 URL 입력 후 Enter">
-          <button type="button" id="settingBgReset" class="btn btn-secondary">기본 배경으로 초기화</button>
+          <input type="text" id="settingBgUrl" placeholder="Enter image URL and press Enter">
+          <button type="button" id="settingBgReset" class="btn btn-secondary">Reset to Default Background</button>
         </div>
       </div>
 
       <div class="settings-block">
-        <h3>프로필 사진</h3>
+        <h3>Profile Photo</h3>
         <label class="file-label">
-          📤 사진 업로드
+          📤 Upload Photo
           <input type="file" id="settingAvatarFile" accept="image/*">
         </label>
         <div class="avatar-editor" id="avatarEditorWrap">
           <div class="avatar-preview-frame" id="avatarPreviewFrame">
-            <img id="avatarPreviewImg" alt="프로필 미리보기" draggable="false">
+            <img id="avatarPreviewImg" alt="Profile preview" draggable="false">
           </div>
           <div class="avatar-controls">
-            <p class="avatar-hint">사진을 드래그해서 위치를 조정하세요</p>
-            <label>확대/축소
+            <p class="avatar-hint">Drag the photo to adjust its position</p>
+            <label>Zoom
               <input type="range" id="avatarZoom" min="100" max="300" value="100">
             </label>
-            <button type="button" id="avatarPosReset" class="btn btn-secondary">위치 초기화</button>
+            <button type="button" id="avatarPosReset" class="btn btn-secondary">Reset Position</button>
           </div>
         </div>
       </div>
