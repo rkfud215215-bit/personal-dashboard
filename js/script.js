@@ -407,15 +407,15 @@
   const archiveTabs = document.querySelectorAll('.tab-btn');
   const archiveForm = document.getElementById('archiveForm');
   const archiveSearch = document.getElementById('archiveSearch');
-  const archiveStatus = document.getElementById('archiveStatus');
-  const archiveRating = document.getElementById('archiveRating');
   const archiveMemo = document.getElementById('archiveMemo');
   const archiveResults = document.getElementById('archiveResults');
   const archiveSearchStatus = document.getElementById('archiveSearchStatus');
-  const archiveSelectedChip = document.getElementById('archiveSelectedChip');
-  const archiveSelectedPoster = document.getElementById('archiveSelectedPoster');
-  const archiveSelectedLabel = document.getElementById('archiveSelectedLabel');
-  const archiveSelectedClear = document.getElementById('archiveSelectedClear');
+  const archiveDraftCard = document.getElementById('archiveDraftCard');
+  const archiveDraftPoster = document.getElementById('archiveDraftPoster');
+  const archiveDraftTitle = document.getElementById('archiveDraftTitle');
+  const archiveDraftYear = document.getElementById('archiveDraftYear');
+  const archiveDraftStatusPills = document.getElementById('archiveDraftStatusPills');
+  const archiveDraftStars = document.getElementById('archiveDraftStars');
   const archiveList = document.getElementById('archiveList');
   const archiveEmpty = document.getElementById('archiveEmpty');
 
@@ -423,25 +423,74 @@
   let archiveSelection = null;
   let archiveSearchTimer = null;
   let archiveSearchSeq = 0;
+  let archiveDraft = { status: 'planned', rating: 0 };
+
+  const statusLabel = { planned: 'Plan to Watch', watching: 'Watching', completed: 'Completed' };
+  const tmdbType = () => (currentArchiveTab === 'movies' ? 'movie' : 'tv');
+
+  function renderStatusPillsUI(container, status) {
+    container.querySelectorAll('.status-pill').forEach((btn) => {
+      btn.classList.toggle('active', btn.dataset.status === status);
+    });
+  }
+  function renderStarsUI(container, rating) {
+    container.querySelectorAll('.star').forEach((btn) => {
+      btn.classList.toggle('filled', parseInt(btn.dataset.value, 10) <= rating);
+    });
+  }
+
+  function resetArchiveDraft() {
+    archiveDraft = { status: 'planned', rating: 0 };
+    renderStatusPillsUI(archiveDraftStatusPills, archiveDraft.status);
+    renderStarsUI(archiveDraftStars, archiveDraft.rating);
+  }
+
+  function updateDraftCardDisplay() {
+    const query = archiveSearch.value.trim();
+    if (!query) {
+      archiveDraftCard.classList.remove('show');
+      return;
+    }
+    archiveDraftCard.classList.add('show');
+    const matched = archiveSelection && archiveSelection.title === query ? archiveSelection : null;
+    archiveDraftTitle.textContent = matched ? matched.title : query;
+    archiveDraftYear.textContent = matched ? matched.year : '';
+    if (matched && matched.poster) {
+      archiveDraftPoster.src = matched.poster;
+      archiveDraftPoster.style.display = '';
+    } else {
+      archiveDraftPoster.removeAttribute('src');
+      archiveDraftPoster.style.display = 'none';
+    }
+  }
+
+  archiveDraftStatusPills.addEventListener('click', (e) => {
+    const btn = e.target.closest('.status-pill');
+    if (!btn) return;
+    archiveDraft.status = btn.dataset.status;
+    renderStatusPillsUI(archiveDraftStatusPills, archiveDraft.status);
+  });
+  archiveDraftStars.addEventListener('click', (e) => {
+    const btn = e.target.closest('.star');
+    if (!btn) return;
+    const val = parseInt(btn.dataset.value, 10);
+    archiveDraft.rating = archiveDraft.rating === val ? 0 : val;
+    renderStarsUI(archiveDraftStars, archiveDraft.rating);
+  });
+  resetArchiveDraft();
 
   archiveTabs.forEach((btn) => {
     btn.addEventListener('click', () => {
       currentArchiveTab = btn.dataset.tab;
       archiveTabs.forEach((b) => b.classList.toggle('active', b === btn));
-      clearArchiveSelection();
       archiveResults.innerHTML = '';
       archiveSearchStatus.textContent = '';
       renderArchive();
     });
   });
 
-  const statusLabel = { planned: 'Plan to Watch', watching: 'Watching', completed: 'Completed' };
-  const tmdbType = () => (currentArchiveTab === 'movies' ? 'movie' : 'tv');
-
   function clearArchiveSelection() {
     archiveSelection = null;
-    archiveSelectedChip.classList.remove('show');
-    archiveSelectedPoster.src = '';
   }
 
   function selectArchiveResult(result) {
@@ -456,10 +505,8 @@
       poster: result.poster_path ? (TMDB_IMG_BASE + result.poster_path) : ''
     };
     archiveSearch.value = title;
-    archiveSelectedLabel.textContent = year ? (title + ' (' + year + ')') : title;
-    archiveSelectedPoster.src = archiveSelection.poster;
-    archiveSelectedChip.classList.toggle('show', !!archiveSelection.poster);
     archiveResults.innerHTML = '';
+    updateDraftCardDisplay();
   }
 
   function renderArchiveResults(results) {
@@ -514,6 +561,7 @@
     }
     clearTimeout(archiveSearchTimer);
     const query = archiveSearch.value.trim();
+    updateDraftCardDisplay();
     if (!query) {
       archiveSearchSeq++;
       archiveResults.innerHTML = '';
@@ -521,12 +569,6 @@
       return;
     }
     archiveSearchTimer = setTimeout(() => requestArchiveSearch(query), 400);
-  });
-
-  archiveSelectedClear.addEventListener('click', () => {
-    clearArchiveSelection();
-    archiveSearch.value = '';
-    archiveSearch.focus();
   });
 
   function renderArchive() {
@@ -541,9 +583,14 @@
       const card = document.createElement('div');
       card.className = 'archive-card' + (item.poster ? ' has-poster' : '');
       card.dataset.id = item.id;
-      const stars = item.rating > 0 ? '★'.repeat(item.rating) + '☆'.repeat(5 - item.rating) : '';
       const posterHtml = item.poster ? '<img class="archive-poster" src="' + item.poster + '" alt="">' : '';
       const yearHtml = item.year ? '<div class="archive-year"></div>' : '';
+      const pillsHtml = ['planned', 'watching', 'completed'].map((s) =>
+        `<button type="button" class="status-pill${item.status === s ? ' active' : ''}" data-status="${s}">${statusLabel[s]}</button>`
+      ).join('');
+      const starsHtml = [1, 2, 3, 4, 5].map((v) =>
+        `<button type="button" class="star${item.rating >= v ? ' filled' : ''}" data-value="${v}">★</button>`
+      ).join('');
       card.innerHTML = `
         ${posterHtml}
         <div class="archive-card-body">
@@ -554,8 +601,8 @@
             </div>
             <button class="btn-icon archive-delete" title="Delete">✕</button>
           </div>
-          <span class="archive-badge">${statusLabel[item.status] || item.status}</span>
-          ${stars ? `<div class="archive-rating">${stars}</div>` : ''}
+          <div class="status-pills">${pillsHtml}</div>
+          <div class="star-rating">${starsHtml}</div>
           ${item.memo ? `<div class="archive-memo"></div>` : ''}
         </div>
       `;
@@ -578,8 +625,8 @@
       year: matched ? matched.year : '',
       poster: matched ? matched.poster : '',
       tmdb_id: matched ? matched.tmdbId : null,
-      status: archiveStatus.value,
-      rating: parseInt(archiveRating.value, 10) || 0,
+      status: archiveDraft.status,
+      rating: archiveDraft.rating,
       memo: archiveMemo.value.trim()
     };
     const { data, error } = await supabaseClient.from('archive_items').insert(payload).select().single();
@@ -590,23 +637,50 @@
     });
     archiveSearch.value = '';
     archiveMemo.value = '';
-    archiveStatus.value = 'planned';
-    archiveRating.value = '0';
     clearArchiveSelection();
     archiveResults.innerHTML = '';
     archiveSearchStatus.textContent = '';
+    resetArchiveDraft();
+    updateDraftCardDisplay();
     renderArchive();
   });
 
   archiveList.addEventListener('click', async (e) => {
     const card = e.target.closest('.archive-card');
-    if (!card || !e.target.closest('.archive-delete')) return;
+    if (!card) return;
     const id = card.dataset.id;
-    if (!confirm('Delete this item?')) return;
-    const { error } = await supabaseClient.from('archive_items').delete().eq('id', id);
-    if (error) { alert('Could not delete item: ' + error.message); return; }
-    state.archive[currentArchiveTab] = state.archive[currentArchiveTab].filter((x) => x.id !== id);
-    renderArchive();
+    const item = state.archive[currentArchiveTab].find((x) => x.id === id);
+    if (!item) return;
+
+    if (e.target.closest('.archive-delete')) {
+      if (!confirm('Delete this item?')) return;
+      const { error } = await supabaseClient.from('archive_items').delete().eq('id', id);
+      if (error) { alert('Could not delete item: ' + error.message); return; }
+      state.archive[currentArchiveTab] = state.archive[currentArchiveTab].filter((x) => x.id !== id);
+      renderArchive();
+      return;
+    }
+
+    const pillBtn = e.target.closest('.status-pill');
+    if (pillBtn) {
+      const status = pillBtn.dataset.status;
+      if (status === item.status) return;
+      const { error } = await supabaseClient.from('archive_items').update({ status }).eq('id', id);
+      if (error) { alert('Could not update status: ' + error.message); return; }
+      item.status = status;
+      renderArchive();
+      return;
+    }
+
+    const starBtn = e.target.closest('.star');
+    if (starBtn) {
+      const val = parseInt(starBtn.dataset.value, 10);
+      const rating = item.rating === val ? 0 : val;
+      const { error } = await supabaseClient.from('archive_items').update({ rating }).eq('id', id);
+      if (error) { alert('Could not update rating: ' + error.message); return; }
+      item.rating = rating;
+      renderArchive();
+    }
   });
 
   // ================= DIARY =================

@@ -101,31 +101,36 @@
       <form id="archiveForm" class="archive-form">
         <div class="archive-search-row">
           <input type="text" id="archiveSearch" placeholder="Search title (TMDB)" required maxlength="120" autocomplete="off">
-          <select id="archiveStatus">
-            <option value="planned">Plan to Watch</option>
-            <option value="watching">Watching</option>
-            <option value="completed">Completed</option>
-          </select>
-          <select id="archiveRating">
-            <option value="0">No rating</option>
-            <option value="1">★☆☆☆☆</option>
-            <option value="2">★★☆☆☆</option>
-            <option value="3">★★★☆☆</option>
-            <option value="4">★★★★☆</option>
-            <option value="5">★★★★★</option>
-          </select>
-          <button type="submit" class="btn">Add</button>
-        </div>
-        <input type="text" id="archiveMemo" placeholder="Notes (optional)" maxlength="300">
-
-        <div id="archiveSelectedChip" class="archive-selected-chip">
-          <img id="archiveSelectedPoster" alt="">
-          <span id="archiveSelectedLabel"></span>
-          <button type="button" id="archiveSelectedClear" class="btn-icon" title="Clear selection">✕</button>
         </div>
 
         <p id="archiveSearchStatus" class="archive-search-status"></p>
         <div id="archiveResults" class="archive-results"></div>
+
+        <div id="archiveDraftCard" class="archive-card archive-draft-card">
+          <img id="archiveDraftPoster" class="archive-poster" alt="" style="display:none;">
+          <div class="archive-card-body">
+            <div class="archive-card-top">
+              <div>
+                <div id="archiveDraftTitle" class="archive-title"></div>
+                <div id="archiveDraftYear" class="archive-year"></div>
+              </div>
+            </div>
+            <div class="status-pills" id="archiveDraftStatusPills">
+              <button type="button" class="status-pill" data-status="planned">Plan to Watch</button>
+              <button type="button" class="status-pill" data-status="watching">Watching</button>
+              <button type="button" class="status-pill" data-status="completed">Completed</button>
+            </div>
+            <div class="star-rating" id="archiveDraftStars">
+              <button type="button" class="star" data-value="1">★</button>
+              <button type="button" class="star" data-value="2">★</button>
+              <button type="button" class="star" data-value="3">★</button>
+              <button type="button" class="star" data-value="4">★</button>
+              <button type="button" class="star" data-value="5">★</button>
+            </div>
+            <input type="text" id="archiveMemo" placeholder="Notes (optional)" maxlength="300">
+            <button type="submit" class="btn">Add to Archive</button>
+          </div>
+        </div>
       </form>
       <div id="archiveList" class="archive-grid"></div>
       <p id="archiveEmpty" class="empty-msg"></p>
