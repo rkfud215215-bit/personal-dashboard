@@ -49,10 +49,15 @@
       <h2>투두리스트</h2>
       <form id="todoForm" class="inline-form">
         <input type="text" id="todoInput" placeholder="할 일을 입력하세요" required maxlength="200">
+        <input type="date" id="todoDate">
         <button type="submit" class="btn">추가</button>
       </form>
-      <ul id="todoList" class="list todo-list"></ul>
-      <p id="todoEmpty" class="empty-msg">아직 할 일이 없어요. 새로운 할 일을 추가해보세요 ✨</p>
+      <div class="todo-nav">
+        <button type="button" id="todoPrev" class="btn-icon" title="이전 3일">‹</button>
+        <button type="button" id="todoToday" class="btn btn-secondary">오늘로 이동</button>
+        <button type="button" id="todoNext" class="btn-icon" title="다음 3일">›</button>
+      </div>
+      <div id="todoDays" class="todo-days"></div>
     </section>
 
     <!-- HABIT -->
@@ -74,23 +79,34 @@
         <button class="tab-btn active" data-tab="movies">🎬 영화</button>
         <button class="tab-btn" data-tab="series">📺 시리즈</button>
       </div>
-      <form id="archiveForm" class="inline-form">
-        <input type="text" id="archiveTitle" placeholder="작품 제목" required maxlength="120">
-        <select id="archiveStatus">
-          <option value="예정">볼 예정</option>
-          <option value="시청중">시청 중</option>
-          <option value="완료">완료</option>
-        </select>
-        <select id="archiveRating">
-          <option value="0">평점 없음</option>
-          <option value="1">★☆☆☆☆</option>
-          <option value="2">★★☆☆☆</option>
-          <option value="3">★★★☆☆</option>
-          <option value="4">★★★★☆</option>
-          <option value="5">★★★★★</option>
-        </select>
+      <form id="archiveForm" class="archive-form">
+        <div class="archive-search-row">
+          <input type="text" id="archiveSearch" placeholder="작품 제목 검색 (TMDB)" required maxlength="120" autocomplete="off">
+          <select id="archiveStatus">
+            <option value="예정">볼 예정</option>
+            <option value="시청중">시청 중</option>
+            <option value="완료">완료</option>
+          </select>
+          <select id="archiveRating">
+            <option value="0">평점 없음</option>
+            <option value="1">★☆☆☆☆</option>
+            <option value="2">★★☆☆☆</option>
+            <option value="3">★★★☆☆</option>
+            <option value="4">★★★★☆</option>
+            <option value="5">★★★★★</option>
+          </select>
+          <button type="submit" class="btn">추가</button>
+        </div>
         <input type="text" id="archiveMemo" placeholder="메모 (선택)" maxlength="300">
-        <button type="submit" class="btn">추가</button>
+
+        <div id="archiveSelectedChip" class="archive-selected-chip">
+          <img id="archiveSelectedPoster" alt="">
+          <span id="archiveSelectedLabel"></span>
+          <button type="button" id="archiveSelectedClear" class="btn-icon" title="선택 해제">✕</button>
+        </div>
+
+        <p id="archiveSearchStatus" class="archive-search-status"></p>
+        <div id="archiveResults" class="archive-results"></div>
       </form>
       <div id="archiveList" class="archive-grid"></div>
       <p id="archiveEmpty" class="empty-msg"></p>
@@ -143,19 +159,15 @@
           <input type="file" id="settingAvatarFile" accept="image/*">
         </label>
         <div class="avatar-editor" id="avatarEditorWrap">
-          <div class="avatar-preview-frame">
-            <img id="avatarPreviewImg" alt="프로필 미리보기">
+          <div class="avatar-preview-frame" id="avatarPreviewFrame">
+            <img id="avatarPreviewImg" alt="프로필 미리보기" draggable="false">
           </div>
-          <div class="avatar-sliders">
+          <div class="avatar-controls">
+            <p class="avatar-hint">사진을 드래그해서 위치를 조정하세요</p>
             <label>확대/축소
               <input type="range" id="avatarZoom" min="100" max="300" value="100">
             </label>
-            <label>가로 위치
-              <input type="range" id="avatarPosX" min="0" max="100" value="50">
-            </label>
-            <label>세로 위치
-              <input type="range" id="avatarPosY" min="0" max="100" value="50">
-            </label>
+            <button type="button" id="avatarPosReset" class="btn btn-secondary">위치 초기화</button>
           </div>
         </div>
       </div>

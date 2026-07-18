@@ -2,15 +2,48 @@
   'use strict';
 
   const STORAGE_KEY = 'personalDashboard.state.v1';
+  // TMDB v3 API key — embedded client-side is TMDB's supported usage pattern for browser apps.
+  const TMDB_API_KEY = '975c807f73d5af29d71e50a5264da6c8';
+  const TMDB_IMG_BASE = 'https://image.tmdb.org/t/p/w300';
 
   const defaultState = {
-    profile: { name: '', photo: '', zoom: 100, posX: 50, posY: 50 },
+    profile: { name: '', photo: '', zoom: 100, offsetX: 0, offsetY: 0 },
     background: { type: 'default', value: '' },
     todos: [],
     habits: [],
     archive: { movies: [], series: [] },
     diary: []
   };
+
+  const uid = () => Date.now().toString(36) + Math.random().toString(36).slice(2, 8);
+  const todayStr = () => {
+    const d = new Date();
+    const y = d.getFullYear();
+    const m = String(d.getMonth() + 1).padStart(2, '0');
+    const day = String(d.getDate()).padStart(2, '0');
+    return `${y}-${m}-${day}`;
+  };
+  const escapeHtml = (str) =>
+    String(str ?? '').replace(/[&<>"']/g, (c) => ({
+      '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;'
+    })[c]);
+  const clamp = (v, min, max) => Math.min(max, Math.max(min, v));
+
+  const WEEKDAYS_KO = ['일', '월', '화', '수', '목', '금', '토'];
+  function addDaysToDateStr(dateStr, days) {
+    const [y, m, d] = dateStr.split('-').map(Number);
+    const dt = new Date(y, m - 1, d);
+    dt.setDate(dt.getDate() + days);
+    const yy = dt.getFullYear();
+    const mm = String(dt.getMonth() + 1).padStart(2, '0');
+    const dd = String(dt.getDate()).padStart(2, '0');
+    return `${yy}-${mm}-${dd}`;
+  }
+  function formatDateLabel(dateStr) {
+    const [y, m, d] = dateStr.split('-').map(Number);
+    const dt = new Date(y, m - 1, d);
+    return { date: `${m}월 ${d}일`, weekday: WEEKDAYS_KO[dt.getDay()] + '요일' };
+  }
 
   function loadState() {
     try {
@@ -20,7 +53,9 @@
       return {
         profile: { ...defaultState.profile, ...(parsed.profile || {}) },
         background: { ...defaultState.background, ...(parsed.background || {}) },
-        todos: Array.isArray(parsed.todos) ? parsed.todos : [],
+        todos: Array.isArray(parsed.todos)
+          ? parsed.todos.map((t) => ({ ...t, date: t.date || todayStr() }))
+          : [],
         habits: Array.isArray(parsed.habits) ? parsed.habits : [],
         archive: {
           movies: Array.isArray(parsed.archive?.movies) ? parsed.archive.movies : [],
@@ -51,19 +86,6 @@
       }
     }
   }
-
-  const uid = () => Date.now().toString(36) + Math.random().toString(36).slice(2, 8);
-  const todayStr = () => {
-    const d = new Date();
-    const y = d.getFullYear();
-    const m = String(d.getMonth() + 1).padStart(2, '0');
-    const day = String(d.getDate()).padStart(2, '0');
-    return `${y}-${m}-${day}`;
-  };
-  const escapeHtml = (str) =>
-    String(str ?? '').replace(/[&<>"']/g, (c) => ({
-      '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;'
-    })[c]);
 
   // ---------- Image resize helper (keeps localStorage usage sane) ----------
   function resizeImageFile(file, maxDim, quality) {
@@ -114,20 +136,68 @@
   const avatarImg = document.getElementById('avatarImg');
   const profileNameEl = document.getElementById('profileName');
 
+  // Computes how a natural-size image should be scaled + translated to cover a
+  // (square) box, given a zoom factor and a normalized (box-size-independent) offset.
+  function computeAvatarLayout(natW, natH, boxW, boxH, zoom, offX, offY) {
+    const coverScale = Math.max(boxW / natW, boxH / natH);
+    const scale = coverScale * zoom;
+    const renderedW = natW * scale;
+    const renderedH = natH * scale;
+    const baseX = (boxW - renderedW) / 2;
+    const baseY = (boxH - renderedH) / 2;
+    const halfRangeX = Math.max(0, (renderedW - boxW) / 2);
+    const halfRangeY = Math.max(0, (renderedH - boxH) / 2);
+    const offXpx = clamp(offX * boxW, -halfRangeX, halfRangeX);
+    const offYpx = clamp(offY * boxH, -halfRangeY, halfRangeY);
+    return {
+      scale,
+      tx: baseX + offXpx,
+      ty: baseY + offYpx,
+      // clamped normalized offsets, so callers can re-persist a corrected value
+      clampedOffX: boxW ? offXpx / boxW : 0,
+      clampedOffY: boxH ? offYpx / boxH : 0
+    };
+  }
+
+  function applyAvatarLayout(imgEl, boxW, boxH) {
+    const natW = imgEl.naturalWidth;
+    const natH = imgEl.naturalHeight;
+    if (!natW || !natH || !boxW || !boxH) return;
+    const zoom = (state.profile.zoom || 100) / 100;
+    const offX = state.profile.offsetX || 0;
+    const offY = state.profile.offsetY || 0;
+    const layout = computeAvatarLayout(natW, natH, boxW, boxH, zoom, offX, offY);
+    imgEl.style.width = `${natW}px`;
+    imgEl.style.height = `${natH}px`;
+    imgEl.style.transform = `translate(${layout.tx}px, ${layout.ty}px) scale(${layout.scale})`;
+    return layout;
+  }
+
+  function layoutAllAvatars() {
+    if (avatarImg.complete && avatarImg.naturalWidth) {
+      applyAvatarLayout(avatarImg, avatarWrap.clientWidth, avatarWrap.clientHeight);
+    }
+    if (avatarPreviewImg.complete && avatarPreviewImg.naturalWidth) {
+      applyAvatarLayout(avatarPreviewImg, avatarPreviewFrame.clientWidth, avatarPreviewFrame.clientHeight);
+    }
+  }
+
   function renderProfile() {
     profileNameEl.textContent = state.profile.name.trim() || '이름을 설정해주세요';
     if (state.profile.photo) {
-      avatarImg.src = state.profile.photo;
+      if (avatarImg.getAttribute('src') !== state.profile.photo) {
+        avatarImg.src = state.profile.photo;
+      }
       avatarWrap.classList.add('has-photo');
     } else {
       avatarImg.removeAttribute('src');
       avatarWrap.classList.remove('has-photo');
     }
-    const zoom = (state.profile.zoom || 100) / 100;
-    document.documentElement.style.setProperty('--avatar-zoom', zoom);
-    document.documentElement.style.setProperty('--avatar-x', `${state.profile.posX ?? 50}%`);
-    document.documentElement.style.setProperty('--avatar-y', `${state.profile.posY ?? 50}%`);
+    layoutAllAvatars();
   }
+
+  avatarImg.addEventListener('load', layoutAllAvatars);
+  window.addEventListener('resize', layoutAllAvatars);
 
   // ================= BACKGROUND =================
   const bgLayer = document.getElementById('bgLayer');
@@ -144,37 +214,65 @@
   // ================= TODO =================
   const todoForm = document.getElementById('todoForm');
   const todoInput = document.getElementById('todoInput');
-  const todoList = document.getElementById('todoList');
-  const todoEmpty = document.getElementById('todoEmpty');
+  const todoDateInput = document.getElementById('todoDate');
+  const todoDays = document.getElementById('todoDays');
+  const todoPrev = document.getElementById('todoPrev');
+  const todoNext = document.getElementById('todoNext');
+  const todoToday = document.getElementById('todoToday');
+
+  todoDateInput.value = todayStr();
+  let todoWindowStart = todayStr();
 
   function renderTodos() {
-    todoList.innerHTML = '';
-    todoEmpty.style.display = state.todos.length ? 'none' : 'block';
-    state.todos.forEach((t) => {
-      const li = document.createElement('li');
-      li.className = 'todo-item' + (t.done ? ' done' : '');
-      li.dataset.id = t.id;
-      li.innerHTML = `
-        <button class="todo-check" title="완료 토글">${t.done ? '✓' : ''}</button>
-        <span class="todo-text"></span>
-        <button class="btn-icon todo-delete" title="삭제">✕</button>
+    todoDays.innerHTML = '';
+    const today = todayStr();
+    for (let i = 0; i < 3; i++) {
+      const dateStr = addDaysToDateStr(todoWindowStart, i);
+      const { date: dateLabel, weekday } = formatDateLabel(dateStr);
+      const dayTodos = state.todos
+        .filter((t) => t.date === dateStr)
+        .sort((a, b) => b.createdAt - a.createdAt);
+
+      const dayEl = document.createElement('div');
+      dayEl.className = 'todo-day glass-card' + (dateStr === today ? ' is-today' : '');
+      dayEl.dataset.date = dateStr;
+      dayEl.innerHTML = `
+        <div class="todo-day-header">
+          <span class="todo-day-date">${dateLabel}${dateStr === today ? ' · 오늘' : ''}</span>
+          <span class="todo-day-weekday">${weekday}</span>
+        </div>
+        <ul class="todo-list"></ul>
+        <p class="empty-msg" style="display:${dayTodos.length ? 'none' : 'block'}">할 일이 없어요.</p>
       `;
-      li.querySelector('.todo-text').textContent = t.text;
-      todoList.appendChild(li);
-    });
+      const listEl = dayEl.querySelector('.todo-list');
+      dayTodos.forEach((t) => {
+        const li = document.createElement('li');
+        li.className = 'todo-item' + (t.done ? ' done' : '');
+        li.dataset.id = t.id;
+        li.innerHTML = `
+          <button class="todo-check" title="완료 토글">${t.done ? '✓' : ''}</button>
+          <span class="todo-text"></span>
+          <button class="btn-icon todo-delete" title="삭제">✕</button>
+        `;
+        li.querySelector('.todo-text').textContent = t.text;
+        listEl.appendChild(li);
+      });
+      todoDays.appendChild(dayEl);
+    }
   }
 
   todoForm.addEventListener('submit', (e) => {
     e.preventDefault();
     const text = todoInput.value.trim();
     if (!text) return;
-    state.todos.unshift({ id: uid(), text, done: false, createdAt: Date.now() });
+    const date = todoDateInput.value || todayStr();
+    state.todos.unshift({ id: uid(), text, date, done: false, createdAt: Date.now() });
     todoInput.value = '';
     save();
     renderTodos();
   });
 
-  todoList.addEventListener('click', (e) => {
+  todoDays.addEventListener('click', (e) => {
     const li = e.target.closest('.todo-item');
     if (!li) return;
     const id = li.dataset.id;
@@ -186,6 +284,19 @@
       state.todos = state.todos.filter((x) => x.id !== id);
       save(); renderTodos();
     }
+  });
+
+  todoPrev.addEventListener('click', () => {
+    todoWindowStart = addDaysToDateStr(todoWindowStart, -3);
+    renderTodos();
+  });
+  todoNext.addEventListener('click', () => {
+    todoWindowStart = addDaysToDateStr(todoWindowStart, 3);
+    renderTodos();
+  });
+  todoToday.addEventListener('click', () => {
+    todoWindowStart = todayStr();
+    renderTodos();
   });
 
   // ================= HABIT TRACKER =================
@@ -274,24 +385,128 @@
   // ================= ARCHIVE =================
   const archiveTabs = document.querySelectorAll('.tab-btn');
   const archiveForm = document.getElementById('archiveForm');
-  const archiveTitle = document.getElementById('archiveTitle');
+  const archiveSearch = document.getElementById('archiveSearch');
   const archiveStatus = document.getElementById('archiveStatus');
   const archiveRating = document.getElementById('archiveRating');
   const archiveMemo = document.getElementById('archiveMemo');
+  const archiveResults = document.getElementById('archiveResults');
+  const archiveSearchStatus = document.getElementById('archiveSearchStatus');
+  const archiveSelectedChip = document.getElementById('archiveSelectedChip');
+  const archiveSelectedPoster = document.getElementById('archiveSelectedPoster');
+  const archiveSelectedLabel = document.getElementById('archiveSelectedLabel');
+  const archiveSelectedClear = document.getElementById('archiveSelectedClear');
   const archiveList = document.getElementById('archiveList');
   const archiveEmpty = document.getElementById('archiveEmpty');
 
   let currentArchiveTab = 'movies';
+  let archiveSelection = null;
+  let archiveSearchTimer = null;
+  let archiveSearchSeq = 0;
 
   archiveTabs.forEach((btn) => {
     btn.addEventListener('click', () => {
       currentArchiveTab = btn.dataset.tab;
       archiveTabs.forEach((b) => b.classList.toggle('active', b === btn));
+      clearArchiveSelection();
+      archiveResults.innerHTML = '';
+      archiveSearchStatus.textContent = '';
       renderArchive();
     });
   });
 
   const statusLabel = { '예정': '볼 예정', '시청중': '시청 중', '완료': '완료' };
+  const tmdbType = () => (currentArchiveTab === 'movies' ? 'movie' : 'tv');
+
+  function clearArchiveSelection() {
+    archiveSelection = null;
+    archiveSelectedChip.classList.remove('show');
+    archiveSelectedPoster.src = '';
+  }
+
+  function selectArchiveResult(result) {
+    const isMovie = tmdbType() === 'movie';
+    const title = isMovie ? result.title : result.name;
+    const dateStr = isMovie ? result.release_date : result.first_air_date;
+    const year = dateStr ? dateStr.slice(0, 4) : '';
+    archiveSelection = {
+      tmdbId: result.id,
+      title,
+      year,
+      poster: result.poster_path ? (TMDB_IMG_BASE + result.poster_path) : ''
+    };
+    archiveSearch.value = title;
+    archiveSelectedLabel.textContent = year ? (title + ' (' + year + ')') : title;
+    archiveSelectedPoster.src = archiveSelection.poster;
+    archiveSelectedChip.classList.toggle('show', !!archiveSelection.poster);
+    archiveResults.innerHTML = '';
+  }
+
+  function renderArchiveResults(results) {
+    const isMovie = tmdbType() === 'movie';
+    archiveResults.innerHTML = '';
+    results.forEach((r) => {
+      const title = isMovie ? r.title : r.name;
+      const dateStr = isMovie ? r.release_date : r.first_air_date;
+      const year = dateStr ? dateStr.slice(0, 4) : '';
+      const card = document.createElement('div');
+      card.className = 'archive-result-card';
+      const posterHtml = r.poster_path
+        ? '<img class="archive-result-poster" src="' + TMDB_IMG_BASE + r.poster_path + '" alt="">'
+        : '<div class="archive-result-poster" style="display:flex;align-items:center;justify-content:center;font-size:22px;">🎬</div>';
+      card.innerHTML = posterHtml
+        + '<div class="archive-result-title"></div>'
+        + '<div class="archive-result-year"></div>';
+      card.querySelector('.archive-result-title').textContent = title;
+      card.querySelector('.archive-result-year').textContent = year;
+      card.addEventListener('click', () => selectArchiveResult(r));
+      archiveResults.appendChild(card);
+    });
+  }
+
+  function requestArchiveSearch(query) {
+    const seq = ++archiveSearchSeq;
+    archiveSearchStatus.textContent = '검색 중…';
+    const endpoint = 'https://api.themoviedb.org/3/search/' + tmdbType();
+    const url = endpoint + '?api_key=' + TMDB_API_KEY + '&language=ko-KR&query=' + encodeURIComponent(query);
+    fetch(url)
+      .then((res) => {
+        if (seq !== archiveSearchSeq) return null;
+        if (!res.ok) throw new Error('요청 실패');
+        return res.json();
+      })
+      .then((data) => {
+        if (!data || seq !== archiveSearchSeq) return;
+        const results = (data.results || []).slice(0, 10);
+        archiveSearchStatus.textContent = results.length ? '' : '검색 결과가 없어요. 직접 제목을 입력해서 추가할 수 있어요.';
+        renderArchiveResults(results);
+      })
+      .catch(() => {
+        if (seq !== archiveSearchSeq) return;
+        archiveSearchStatus.textContent = 'TMDB 검색에 실패했어요. 직접 제목을 입력해서 추가할 수 있어요.';
+        archiveResults.innerHTML = '';
+      });
+  }
+
+  archiveSearch.addEventListener('input', () => {
+    if (archiveSelection && archiveSearch.value.trim() !== archiveSelection.title) {
+      clearArchiveSelection();
+    }
+    clearTimeout(archiveSearchTimer);
+    const query = archiveSearch.value.trim();
+    if (!query) {
+      archiveSearchSeq++;
+      archiveResults.innerHTML = '';
+      archiveSearchStatus.textContent = '';
+      return;
+    }
+    archiveSearchTimer = setTimeout(() => requestArchiveSearch(query), 400);
+  });
+
+  archiveSelectedClear.addEventListener('click', () => {
+    clearArchiveSelection();
+    archiveSearch.value = '';
+    archiveSearch.focus();
+  });
 
   function renderArchive() {
     const items = state.archive[currentArchiveTab] || [];
@@ -303,19 +518,28 @@
 
     items.forEach((item) => {
       const card = document.createElement('div');
-      card.className = 'archive-card';
+      card.className = 'archive-card' + (item.poster ? ' has-poster' : '');
       card.dataset.id = item.id;
       const stars = item.rating > 0 ? '★'.repeat(item.rating) + '☆'.repeat(5 - item.rating) : '';
+      const posterHtml = item.poster ? '<img class="archive-poster" src="' + item.poster + '" alt="">' : '';
+      const yearHtml = item.year ? '<div class="archive-year"></div>' : '';
       card.innerHTML = `
-        <div class="archive-card-top">
-          <div class="archive-title"></div>
-          <button class="btn-icon archive-delete" title="삭제">✕</button>
+        ${posterHtml}
+        <div class="archive-card-body">
+          <div class="archive-card-top">
+            <div>
+              <div class="archive-title"></div>
+              ${yearHtml}
+            </div>
+            <button class="btn-icon archive-delete" title="삭제">✕</button>
+          </div>
+          <span class="archive-badge">${statusLabel[item.status] || item.status}</span>
+          ${stars ? `<div class="archive-rating">${stars}</div>` : ''}
+          ${item.memo ? `<div class="archive-memo"></div>` : ''}
         </div>
-        <span class="archive-badge">${statusLabel[item.status] || item.status}</span>
-        ${stars ? `<div class="archive-rating">${stars}</div>` : ''}
-        ${item.memo ? `<div class="archive-memo"></div>` : ''}
       `;
       card.querySelector('.archive-title').textContent = item.title;
+      if (item.year) card.querySelector('.archive-year').textContent = item.year;
       if (item.memo) card.querySelector('.archive-memo').textContent = item.memo;
       archiveList.appendChild(card);
     });
@@ -323,20 +547,27 @@
 
   archiveForm.addEventListener('submit', (e) => {
     e.preventDefault();
-    const title = archiveTitle.value.trim();
+    const title = archiveSearch.value.trim();
     if (!title) return;
+    const matched = archiveSelection && archiveSelection.title === title ? archiveSelection : null;
     state.archive[currentArchiveTab].unshift({
       id: uid(),
       title,
+      year: matched ? matched.year : '',
+      poster: matched ? matched.poster : '',
+      tmdbId: matched ? matched.tmdbId : null,
       status: archiveStatus.value,
       rating: parseInt(archiveRating.value, 10) || 0,
       memo: archiveMemo.value.trim(),
       createdAt: Date.now()
     });
-    archiveTitle.value = '';
+    archiveSearch.value = '';
     archiveMemo.value = '';
     archiveStatus.value = '예정';
     archiveRating.value = '0';
+    clearArchiveSelection();
+    archiveResults.innerHTML = '';
+    archiveSearchStatus.textContent = '';
     save();
     renderArchive();
   });
@@ -435,10 +666,12 @@
   const settingBgReset = document.getElementById('settingBgReset');
   const settingAvatarFile = document.getElementById('settingAvatarFile');
   const avatarEditorWrap = document.getElementById('avatarEditorWrap');
+  const avatarPreviewFrame = document.getElementById('avatarPreviewFrame');
   const avatarPreviewImg = document.getElementById('avatarPreviewImg');
   const avatarZoom = document.getElementById('avatarZoom');
-  const avatarPosX = document.getElementById('avatarPosX');
-  const avatarPosY = document.getElementById('avatarPosY');
+  const avatarPosReset = document.getElementById('avatarPosReset');
+
+  avatarPreviewImg.addEventListener('load', layoutAllAvatars);
 
   function initSettingsUI() {
     settingName.value = state.profile.name || '';
@@ -446,12 +679,12 @@
       settingBgUrl.value = state.background.value;
     }
     if (state.profile.photo) {
-      avatarPreviewImg.src = state.profile.photo;
+      if (avatarPreviewImg.getAttribute('src') !== state.profile.photo) {
+        avatarPreviewImg.src = state.profile.photo;
+      }
       avatarEditorWrap.classList.add('show');
     }
     avatarZoom.value = state.profile.zoom || 100;
-    avatarPosX.value = state.profile.posX ?? 50;
-    avatarPosY.value = state.profile.posY ?? 50;
   }
 
   settingName.addEventListener('input', () => {
@@ -500,11 +733,9 @@
       const dataUrl = await resizeImageFile(file, 600, 0.85);
       state.profile.photo = dataUrl;
       state.profile.zoom = 100;
-      state.profile.posX = 50;
-      state.profile.posY = 50;
+      state.profile.offsetX = 0;
+      state.profile.offsetY = 0;
       avatarZoom.value = 100;
-      avatarPosX.value = 50;
-      avatarPosY.value = 50;
       avatarPreviewImg.src = dataUrl;
       avatarEditorWrap.classList.add('show');
       save();
@@ -514,16 +745,68 @@
     }
   });
 
-  function updateAvatarAdjust() {
+  avatarZoom.addEventListener('input', () => {
     state.profile.zoom = parseInt(avatarZoom.value, 10);
-    state.profile.posX = parseInt(avatarPosX.value, 10);
-    state.profile.posY = parseInt(avatarPosY.value, 10);
+    // re-clamp the existing offset against the new zoom level
+    const natW = avatarPreviewImg.naturalWidth;
+    const natH = avatarPreviewImg.naturalHeight;
+    const boxW = avatarPreviewFrame.clientWidth;
+    const boxH = avatarPreviewFrame.clientHeight;
+    if (natW && natH && boxW && boxH) {
+      const zoom = state.profile.zoom / 100;
+      const layout = computeAvatarLayout(natW, natH, boxW, boxH, zoom, state.profile.offsetX || 0, state.profile.offsetY || 0);
+      state.profile.offsetX = layout.clampedOffX;
+      state.profile.offsetY = layout.clampedOffY;
+    }
     save();
     renderProfile();
-  }
-  [avatarZoom, avatarPosX, avatarPosY].forEach((el) => {
-    el.addEventListener('input', updateAvatarAdjust);
   });
+
+  avatarPosReset.addEventListener('click', () => {
+    state.profile.offsetX = 0;
+    state.profile.offsetY = 0;
+    save();
+    renderProfile();
+  });
+
+  // ---- Drag-to-reposition on the avatar preview ----
+  let avatarDrag = null;
+  avatarPreviewFrame.addEventListener('pointerdown', (e) => {
+    if (!state.profile.photo) return;
+    avatarDrag = {
+      startX: e.clientX,
+      startY: e.clientY,
+      startOffX: state.profile.offsetX || 0,
+      startOffY: state.profile.offsetY || 0
+    };
+    avatarPreviewFrame.setPointerCapture(e.pointerId);
+    avatarPreviewFrame.classList.add('dragging');
+  });
+  avatarPreviewFrame.addEventListener('pointermove', (e) => {
+    if (!avatarDrag) return;
+    const boxW = avatarPreviewFrame.clientWidth;
+    const boxH = avatarPreviewFrame.clientHeight;
+    const dx = e.clientX - avatarDrag.startX;
+    const dy = e.clientY - avatarDrag.startY;
+    const rawOffX = avatarDrag.startOffX + dx / boxW;
+    const rawOffY = avatarDrag.startOffY + dy / boxH;
+    const natW = avatarPreviewImg.naturalWidth;
+    const natH = avatarPreviewImg.naturalHeight;
+    if (!natW || !natH) return;
+    const zoom = (state.profile.zoom || 100) / 100;
+    const layout = computeAvatarLayout(natW, natH, boxW, boxH, zoom, rawOffX, rawOffY);
+    state.profile.offsetX = layout.clampedOffX;
+    state.profile.offsetY = layout.clampedOffY;
+    renderProfile();
+  });
+  function endAvatarDrag(e) {
+    if (!avatarDrag) return;
+    avatarDrag = null;
+    avatarPreviewFrame.classList.remove('dragging');
+    save();
+  }
+  avatarPreviewFrame.addEventListener('pointerup', endAvatarDrag);
+  avatarPreviewFrame.addEventListener('pointercancel', endAvatarDrag);
 
   // ================= INIT =================
   function renderAll() {
