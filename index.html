@@ -1,0 +1,169 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>My Dashboard</title>
+<link rel="stylesheet" href="css/style.css">
+</head>
+<body>
+
+<div id="bgLayer" class="default-bg"></div>
+
+<div class="app">
+
+  <aside class="sidebar glass">
+    <div class="profile">
+      <div class="avatar" id="avatarWrap">
+        <img id="avatarImg" alt="프로필 사진">
+        <span id="avatarPlaceholder">🙂</span>
+      </div>
+      <div class="profile-name" id="profileName">이름을 설정해주세요</div>
+    </div>
+
+    <nav class="menu">
+      <button class="menu-item active" data-section="todo">
+        <span class="menu-icon">✅</span><span>투두리스트</span>
+      </button>
+      <button class="menu-item" data-section="habit">
+        <span class="menu-icon">🪴</span><span>해빗트래커</span>
+      </button>
+      <button class="menu-item" data-section="archive">
+        <span class="menu-icon">🎬</span><span>아카이브</span>
+      </button>
+      <button class="menu-item" data-section="diary">
+        <span class="menu-icon">📔</span><span>다이어리</span>
+      </button>
+      <button class="menu-item" data-section="settings">
+        <span class="menu-icon">⚙️</span><span>환경설정</span>
+      </button>
+    </nav>
+
+    <div class="sidebar-footer">Personal Dashboard</div>
+  </aside>
+
+  <main class="content">
+
+    <!-- TODO -->
+    <section id="section-todo" class="panel glass active">
+      <h2>투두리스트</h2>
+      <form id="todoForm" class="inline-form">
+        <input type="text" id="todoInput" placeholder="할 일을 입력하세요" required maxlength="200">
+        <button type="submit" class="btn">추가</button>
+      </form>
+      <ul id="todoList" class="list todo-list"></ul>
+      <p id="todoEmpty" class="empty-msg">아직 할 일이 없어요. 새로운 할 일을 추가해보세요 ✨</p>
+    </section>
+
+    <!-- HABIT -->
+    <section id="section-habit" class="panel glass">
+      <h2>해빗트래커 🪴</h2>
+      <form id="habitForm" class="inline-form">
+        <input type="text" id="habitName" placeholder="습관 이름 (예: 아침 물 마시기)" required maxlength="60">
+        <input type="number" id="habitGoal" placeholder="목표일" min="1" max="3650" required class="input-narrow">
+        <button type="submit" class="btn">추가</button>
+      </form>
+      <div id="habitList" class="habit-grid"></div>
+      <p id="habitEmpty" class="empty-msg">등록된 습관이 없어요. 키우고 싶은 습관을 심어보세요 🌱</p>
+    </section>
+
+    <!-- ARCHIVE -->
+    <section id="section-archive" class="panel glass">
+      <h2>아카이브</h2>
+      <div class="tabs">
+        <button class="tab-btn active" data-tab="movies">🎬 영화</button>
+        <button class="tab-btn" data-tab="series">📺 시리즈</button>
+      </div>
+      <form id="archiveForm" class="inline-form">
+        <input type="text" id="archiveTitle" placeholder="작품 제목" required maxlength="120">
+        <select id="archiveStatus">
+          <option value="예정">볼 예정</option>
+          <option value="시청중">시청 중</option>
+          <option value="완료">완료</option>
+        </select>
+        <select id="archiveRating">
+          <option value="0">평점 없음</option>
+          <option value="1">★☆☆☆☆</option>
+          <option value="2">★★☆☆☆</option>
+          <option value="3">★★★☆☆</option>
+          <option value="4">★★★★☆</option>
+          <option value="5">★★★★★</option>
+        </select>
+        <input type="text" id="archiveMemo" placeholder="메모 (선택)" maxlength="300">
+        <button type="submit" class="btn">추가</button>
+      </form>
+      <div id="archiveList" class="archive-grid"></div>
+      <p id="archiveEmpty" class="empty-msg"></p>
+    </section>
+
+    <!-- DIARY -->
+    <section id="section-diary" class="panel glass">
+      <h2>다이어리</h2>
+      <form id="diaryForm" class="inline-form diary-form">
+        <div class="diary-form-row">
+          <label class="file-label">
+            📷 사진 선택
+            <input type="file" id="diaryFile" accept="image/*">
+          </label>
+          <input type="text" id="diaryUrl" placeholder="또는 이미지 URL 입력">
+          <input type="date" id="diaryDate">
+        </div>
+        <textarea id="diaryText" placeholder="오늘의 이야기를 적어보세요" required maxlength="500"></textarea>
+        <button type="submit" class="btn">기록 추가</button>
+      </form>
+      <div id="diaryGrid" class="diary-grid"></div>
+      <p id="diaryEmpty" class="empty-msg">아직 작성된 기록이 없어요. 오늘의 순간을 남겨보세요 📸</p>
+    </section>
+
+    <!-- SETTINGS -->
+    <section id="section-settings" class="panel glass">
+      <h2>환경설정</h2>
+
+      <div class="settings-block">
+        <h3>내 이름</h3>
+        <input type="text" id="settingName" placeholder="이름을 입력하세요" maxlength="30">
+      </div>
+
+      <div class="settings-block">
+        <h3>배경 사진</h3>
+        <div class="settings-row">
+          <label class="file-label">
+            🖼️ 파일 업로드
+            <input type="file" id="settingBgFile" accept="image/*">
+          </label>
+          <input type="text" id="settingBgUrl" placeholder="이미지 URL 입력 후 Enter">
+          <button type="button" id="settingBgReset" class="btn btn-secondary">기본 배경으로 초기화</button>
+        </div>
+      </div>
+
+      <div class="settings-block">
+        <h3>프로필 사진</h3>
+        <label class="file-label">
+          📤 사진 업로드
+          <input type="file" id="settingAvatarFile" accept="image/*">
+        </label>
+        <div class="avatar-editor" id="avatarEditorWrap">
+          <div class="avatar-preview-frame">
+            <img id="avatarPreviewImg" alt="프로필 미리보기">
+          </div>
+          <div class="avatar-sliders">
+            <label>확대/축소
+              <input type="range" id="avatarZoom" min="100" max="300" value="100">
+            </label>
+            <label>가로 위치
+              <input type="range" id="avatarPosX" min="0" max="100" value="50">
+            </label>
+            <label>세로 위치
+              <input type="range" id="avatarPosY" min="0" max="100" value="50">
+            </label>
+          </div>
+        </div>
+      </div>
+    </section>
+
+  </main>
+</div>
+
+<script src="js/script.js"></script>
+</body>
+</html>
