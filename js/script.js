@@ -1,19 +1,18 @@
 (() => {
   'use strict';
 
-  const STORAGE_KEY = 'personalDashboard.state.v1';
+  // ---------- Supabase config ----------
+  // The URL + publishable ("anon") key are meant to ship in client-side code —
+  // real data protection comes from the email/password login gate + Row Level
+  // Security policies (see supabase/schema.sql), not from hiding these values.
+  const SUPABASE_URL = 'https://hssifqqzfxwmjvdgdtsc.supabase.co';
+  const SUPABASE_ANON_KEY = 'sb_publishable_GaiDq9NdnkOITfvy50OGbg_yt6606qC';
+  const MEDIA_BUCKET = 'dashboard-media';
+  const supabaseClient = window.supabase.createClient(SUPABASE_URL, SUPABASE_ANON_KEY);
+
   // TMDB v3 API key — embedded client-side is TMDB's supported usage pattern for browser apps.
   const TMDB_API_KEY = '975c807f73d5af29d71e50a5264da6c8';
   const TMDB_IMG_BASE = 'https://image.tmdb.org/t/p/w300';
-
-  const defaultState = {
-    profile: { name: '', photo: '', zoom: 100, offsetX: 0, offsetY: 0 },
-    background: { type: 'default', value: '' },
-    todos: [],
-    habits: [],
-    archive: { movies: [], series: [] },
-    diary: []
-  };
 
   const uid = () => Date.now().toString(36) + Math.random().toString(36).slice(2, 8);
   const todayStr = () => {
@@ -28,6 +27,10 @@
       '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;'
     })[c]);
   const clamp = (v, min, max) => Math.min(max, Math.max(min, v));
+  function debounce(fn, ms) {
+    let t;
+    return (...args) => { clearTimeout(t); t = setTimeout(() => fn(...args), ms); };
+  }
 
   const WEEKDAYS_EN = ['Sunday', 'Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday'];
   const MONTHS_EN = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
@@ -46,49 +49,45 @@
     return { date: `${MONTHS_EN[m - 1]} ${d}`, weekday: WEEKDAYS_EN[dt.getDay()] };
   }
 
-  function loadState() {
-    try {
-      const raw = localStorage.getItem(STORAGE_KEY);
-      if (!raw) return structuredCloneState(defaultState);
-      const parsed = JSON.parse(raw);
-      return {
-        profile: { ...defaultState.profile, ...(parsed.profile || {}) },
-        background: { ...defaultState.background, ...(parsed.background || {}) },
-        todos: Array.isArray(parsed.todos)
-          ? parsed.todos.map((t) => ({ ...t, date: t.date || todayStr() }))
-          : [],
-        habits: Array.isArray(parsed.habits) ? parsed.habits : [],
-        archive: {
-          movies: Array.isArray(parsed.archive?.movies) ? parsed.archive.movies : [],
-          series: Array.isArray(parsed.archive?.series) ? parsed.archive.series : []
-        },
-        diary: Array.isArray(parsed.diary) ? parsed.diary : []
-      };
-    } catch (e) {
-      console.warn('Could not load saved data. Starting with defaults.', e);
-      return structuredCloneState(defaultState);
-    }
+  const state = {
+    profile: { name: '', photo: '', zoom: 100, offsetX: 0, offsetY: 0 },
+    background: { type: 'default', value: '' },
+    todos: [],
+    habits: [],
+    archive: { movies: [], series: [] },
+    diary: []
+  };
+
+  // ---------- Media (Supabase Storage) helpers ----------
+  // DB rows store either a Storage *path* (uploaded photos) or a plain
+  // external URL (pasted image links, TMDB posters). isExternalUrl tells
+  // them apart; mediaUrl() resolves a path to a usable <img src>.
+  const isExternalUrl = (v) => /^https?:\/\//.test(v) || v.startsWith('data:');
+  const mediaUrlCache = new Map();
+  function mediaUrl(path) {
+    if (!path) return '';
+    if (isExternalUrl(path)) return path;
+    return mediaUrlCache.get(path) || '';
+  }
+  async function resolveMediaUrls(paths) {
+    const targets = [...new Set(paths.filter((p) => p && !isExternalUrl(p) && !mediaUrlCache.has(p)))];
+    if (!targets.length) return;
+    const { data, error } = await supabaseClient.storage.from(MEDIA_BUCKET).createSignedUrls(targets, 3600);
+    if (error) { console.error(error); return; }
+    data.forEach((d, i) => { if (d && d.signedUrl) mediaUrlCache.set(targets[i], d.signedUrl); });
+  }
+  async function uploadMedia(blob, folder) {
+    const path = `${currentUser.id}/${folder}/${uid()}.jpg`;
+    const { error } = await supabaseClient.storage.from(MEDIA_BUCKET).upload(path, blob, {
+      contentType: 'image/jpeg',
+      upsert: false
+    });
+    if (error) throw error;
+    await resolveMediaUrls([path]);
+    return path;
   }
 
-  function structuredCloneState(obj) {
-    return JSON.parse(JSON.stringify(obj));
-  }
-
-  let state = loadState();
-
-  function save() {
-    try {
-      localStorage.setItem(STORAGE_KEY, JSON.stringify(state));
-    } catch (e) {
-      if (e && (e.name === 'QuotaExceededError' || e.code === 22)) {
-        alert('Storage is full. Try a smaller photo or delete some older entries.');
-      } else {
-        console.error(e);
-      }
-    }
-  }
-
-  // ---------- Image resize helper (keeps localStorage usage sane) ----------
+  // ---------- Image resize helper (keeps uploads small) ----------
   function resizeImageFile(file, maxDim, quality) {
     return new Promise((resolve, reject) => {
       const reader = new FileReader();
@@ -110,9 +109,10 @@
           const canvas = document.createElement('canvas');
           canvas.width = width;
           canvas.height = height;
-          const ctx = canvas.getContext('2d');
-          ctx.drawImage(img, 0, 0, width, height);
-          resolve(canvas.toDataURL('image/jpeg', quality));
+          canvas.getContext('2d').drawImage(img, 0, 0, width, height);
+          canvas.toBlob((blob) => {
+            if (blob) resolve(blob); else reject(new Error('Could not encode the image.'));
+          }, 'image/jpeg', quality);
         };
         img.src = reader.result;
       };
@@ -154,7 +154,6 @@
       scale,
       tx: baseX + offXpx,
       ty: baseY + offYpx,
-      // clamped normalized offsets, so callers can re-persist a corrected value
       clampedOffX: boxW ? offXpx / boxW : 0,
       clampedOffY: boxH ? offYpx / boxH : 0
     };
@@ -185,10 +184,9 @@
 
   function renderProfile() {
     profileNameEl.textContent = state.profile.name.trim() || 'Set your name';
-    if (state.profile.photo) {
-      if (avatarImg.getAttribute('src') !== state.profile.photo) {
-        avatarImg.src = state.profile.photo;
-      }
+    const src = mediaUrl(state.profile.photo);
+    if (src) {
+      if (avatarImg.getAttribute('src') !== src) avatarImg.src = src;
       avatarWrap.classList.add('has-photo');
     } else {
       avatarImg.removeAttribute('src');
@@ -203,9 +201,10 @@
   // ================= BACKGROUND =================
   const bgLayer = document.getElementById('bgLayer');
   function renderBackground() {
-    if (state.background.type === 'custom' && state.background.value) {
+    const src = state.background.type === 'custom' ? mediaUrl(state.background.value) : '';
+    if (src) {
       bgLayer.classList.remove('default-bg');
-      bgLayer.style.backgroundImage = `url("${state.background.value}")`;
+      bgLayer.style.backgroundImage = `url("${src}")`;
     } else {
       bgLayer.classList.add('default-bg');
       bgLayer.style.backgroundImage = '';
@@ -262,28 +261,38 @@
     }
   }
 
-  todoForm.addEventListener('submit', (e) => {
+  todoForm.addEventListener('submit', async (e) => {
     e.preventDefault();
     const text = todoInput.value.trim();
     if (!text) return;
     const date = todoDateInput.value || todayStr();
-    state.todos.unshift({ id: uid(), text, date, done: false, createdAt: Date.now() });
+    const { data, error } = await supabaseClient.from('todos')
+      .insert({ user_id: currentUser.id, text, date, done: false })
+      .select().single();
+    if (error) { alert('Could not add task: ' + error.message); return; }
+    state.todos.unshift({ id: data.id, text: data.text, date: data.date, done: data.done, createdAt: new Date(data.created_at).getTime() });
     todoInput.value = '';
-    save();
     renderTodos();
   });
 
-  todoDays.addEventListener('click', (e) => {
+  todoDays.addEventListener('click', async (e) => {
     const li = e.target.closest('.todo-item');
     if (!li) return;
     const id = li.dataset.id;
     if (e.target.closest('.todo-check')) {
       const t = state.todos.find((x) => x.id === id);
-      if (t) { t.done = !t.done; save(); renderTodos(); }
+      if (!t) return;
+      const done = !t.done;
+      const { error } = await supabaseClient.from('todos').update({ done }).eq('id', id);
+      if (error) { alert('Could not update task: ' + error.message); return; }
+      t.done = done;
+      renderTodos();
     } else if (e.target.closest('.todo-delete')) {
       if (!confirm('Delete this task?')) return;
+      const { error } = await supabaseClient.from('todos').delete().eq('id', id);
+      if (error) { alert('Could not delete task: ' + error.message); return; }
       state.todos = state.todos.filter((x) => x.id !== id);
-      save(); renderTodos();
+      renderTodos();
     }
   });
 
@@ -348,19 +357,22 @@
     });
   }
 
-  habitForm.addEventListener('submit', (e) => {
+  habitForm.addEventListener('submit', async (e) => {
     e.preventDefault();
     const name = habitName.value.trim();
     const goal = parseInt(habitGoal.value, 10);
     if (!name || !goal || goal < 1) return;
-    state.habits.unshift({ id: uid(), name, goalDays: goal, log: {}, createdAt: Date.now() });
+    const { data, error } = await supabaseClient.from('habits')
+      .insert({ user_id: currentUser.id, name, goal_days: goal, log: {} })
+      .select().single();
+    if (error) { alert('Could not add habit: ' + error.message); return; }
+    state.habits.unshift({ id: data.id, name: data.name, goalDays: data.goal_days, log: data.log || {}, createdAt: new Date(data.created_at).getTime() });
     habitName.value = '';
     habitGoal.value = '';
-    save();
     renderHabits();
   });
 
-  habitList.addEventListener('click', (e) => {
+  habitList.addEventListener('click', async (e) => {
     const card = e.target.closest('.habit-card');
     if (!card) return;
     const id = card.dataset.id;
@@ -369,17 +381,21 @@
 
     if (e.target.closest('.habit-delete')) {
       if (!confirm(`Delete habit '${h.name}'? All progress will be lost too.`)) return;
+      const { error } = await supabaseClient.from('habits').delete().eq('id', id);
+      if (error) { alert('Could not delete habit: ' + error.message); return; }
       state.habits = state.habits.filter((x) => x.id !== id);
-      save(); renderHabits();
+      renderHabits();
       return;
     }
 
     if (e.target.closest('.btn-check')) {
       const today = todayStr();
-      h.log = h.log || {};
-      if (h.log[today]) delete h.log[today];
-      else h.log[today] = true;
-      save(); renderHabits();
+      const newLog = { ...(h.log || {}) };
+      if (newLog[today]) delete newLog[today]; else newLog[today] = true;
+      const { error } = await supabaseClient.from('habits').update({ log: newLog }).eq('id', id);
+      if (error) { alert('Could not update habit: ' + error.message); return; }
+      h.log = newLog;
+      renderHabits();
     }
   });
 
@@ -546,21 +562,27 @@
     });
   }
 
-  archiveForm.addEventListener('submit', (e) => {
+  archiveForm.addEventListener('submit', async (e) => {
     e.preventDefault();
     const title = archiveSearch.value.trim();
     if (!title) return;
     const matched = archiveSelection && archiveSelection.title === title ? archiveSelection : null;
-    state.archive[currentArchiveTab].unshift({
-      id: uid(),
+    const payload = {
+      user_id: currentUser.id,
+      category: currentArchiveTab,
       title,
       year: matched ? matched.year : '',
       poster: matched ? matched.poster : '',
-      tmdbId: matched ? matched.tmdbId : null,
+      tmdb_id: matched ? matched.tmdbId : null,
       status: archiveStatus.value,
       rating: parseInt(archiveRating.value, 10) || 0,
-      memo: archiveMemo.value.trim(),
-      createdAt: Date.now()
+      memo: archiveMemo.value.trim()
+    };
+    const { data, error } = await supabaseClient.from('archive_items').insert(payload).select().single();
+    if (error) { alert('Could not add item: ' + error.message); return; }
+    state.archive[currentArchiveTab].unshift({
+      id: data.id, title: data.title, year: data.year, poster: data.poster, tmdbId: data.tmdb_id,
+      status: data.status, rating: data.rating, memo: data.memo, createdAt: new Date(data.created_at).getTime()
     });
     archiveSearch.value = '';
     archiveMemo.value = '';
@@ -569,17 +591,17 @@
     clearArchiveSelection();
     archiveResults.innerHTML = '';
     archiveSearchStatus.textContent = '';
-    save();
     renderArchive();
   });
 
-  archiveList.addEventListener('click', (e) => {
+  archiveList.addEventListener('click', async (e) => {
     const card = e.target.closest('.archive-card');
     if (!card || !e.target.closest('.archive-delete')) return;
     const id = card.dataset.id;
     if (!confirm('Delete this item?')) return;
+    const { error } = await supabaseClient.from('archive_items').delete().eq('id', id);
+    if (error) { alert('Could not delete item: ' + error.message); return; }
     state.archive[currentArchiveTab] = state.archive[currentArchiveTab].filter((x) => x.id !== id);
-    save();
     renderArchive();
   });
 
@@ -591,6 +613,7 @@
   const diaryText = document.getElementById('diaryText');
   const diaryGrid = document.getElementById('diaryGrid');
   const diaryEmpty = document.getElementById('diaryEmpty');
+  const diarySubmitBtn = diaryForm.querySelector('button[type="submit"]');
 
   diaryDate.value = todayStr();
 
@@ -599,11 +622,20 @@
     diaryEmpty.style.display = state.diary.length ? 'none' : 'block';
     const sorted = [...state.diary].sort((a, b) => (b.date || '').localeCompare(a.date || '') || b.createdAt - a.createdAt);
     sorted.forEach((entry) => {
+      const photoUrls = (entry.photos || []).map(mediaUrl).filter(Boolean);
       const card = document.createElement('div');
       card.className = 'diary-card';
       card.dataset.id = entry.id;
+      let photosHtml = '';
+      if (photoUrls.length === 1) {
+        photosHtml = `<img class="diary-card-img" src="${photoUrls[0]}" alt="Diary photo">`;
+      } else if (photoUrls.length > 1) {
+        photosHtml = '<div class="diary-photo-grid">'
+          + photoUrls.map((p) => `<img src="${p}" alt="Diary photo">`).join('')
+          + '</div>';
+      }
       card.innerHTML = `
-        ${entry.photo ? `<img class="diary-card-img" src="${entry.photo}" alt="Diary photo">` : ''}
+        ${photosHtml}
         <div class="diary-card-body">
           <div class="diary-date">${escapeHtml(entry.date)}</div>
           <div class="diary-text"></div>
@@ -622,41 +654,50 @@
     const text = diaryText.value.trim();
     if (!text) return;
 
-    let photo = '';
-    if (diaryFile.files && diaryFile.files[0]) {
-      try {
-        photo = await resizeImageFile(diaryFile.files[0], 1000, 0.8);
-      } catch (err) {
-        alert('Could not process the photo: ' + err.message);
+    diarySubmitBtn.disabled = true;
+    diarySubmitBtn.textContent = 'Uploading…';
+    try {
+      const photos = [];
+      if (diaryFile.files && diaryFile.files.length) {
+        const blobs = await Promise.all(Array.from(diaryFile.files).map((f) => resizeImageFile(f, 1000, 0.8)));
+        const paths = await Promise.all(blobs.map((b) => uploadMedia(b, 'diary')));
+        photos.push(...paths);
       }
-    } else if (diaryUrl.value.trim()) {
-      photo = diaryUrl.value.trim();
+      if (diaryUrl.value.trim()) photos.push(diaryUrl.value.trim());
+
+      const { data, error } = await supabaseClient.from('diary_entries')
+        .insert({ user_id: currentUser.id, photos, text, date: diaryDate.value || todayStr() })
+        .select().single();
+      if (error) throw error;
+
+      state.diary.push({ id: data.id, photos: data.photos || [], text: data.text, date: data.date, createdAt: new Date(data.created_at).getTime() });
+
+      diaryFile.value = '';
+      diaryUrl.value = '';
+      diaryText.value = '';
+      diaryDate.value = todayStr();
+      renderDiary();
+    } catch (err) {
+      alert('Could not add entry: ' + err.message);
+    } finally {
+      diarySubmitBtn.disabled = false;
+      diarySubmitBtn.textContent = 'Add Entry';
     }
-
-    state.diary.push({
-      id: uid(),
-      photo,
-      text,
-      date: diaryDate.value || todayStr(),
-      createdAt: Date.now()
-    });
-
-    diaryFile.value = '';
-    diaryUrl.value = '';
-    diaryText.value = '';
-    diaryDate.value = todayStr();
-
-    save();
-    renderDiary();
   });
 
-  diaryGrid.addEventListener('click', (e) => {
+  diaryGrid.addEventListener('click', async (e) => {
     const card = e.target.closest('.diary-card');
     if (!card || !e.target.closest('.diary-delete')) return;
     const id = card.dataset.id;
     if (!confirm('Delete this entry?')) return;
+    const entry = state.diary.find((x) => x.id === id);
+    const { error } = await supabaseClient.from('diary_entries').delete().eq('id', id);
+    if (error) { alert('Could not delete entry: ' + error.message); return; }
+    if (entry) {
+      const storagePaths = (entry.photos || []).filter((p) => !isExternalUrl(p));
+      if (storagePaths.length) supabaseClient.storage.from(MEDIA_BUCKET).remove(storagePaths).catch(() => {});
+    }
     state.diary = state.diary.filter((x) => x.id !== id);
-    save();
     renderDiary();
   });
 
@@ -674,73 +715,90 @@
 
   avatarPreviewImg.addEventListener('load', layoutAllAvatars);
 
+  async function persistProfile() {
+    const { error } = await supabaseClient.from('profiles').upsert({
+      user_id: currentUser.id,
+      name: state.profile.name || '',
+      photo_path: state.profile.photo || '',
+      avatar_zoom: state.profile.zoom || 100,
+      avatar_offset_x: state.profile.offsetX || 0,
+      avatar_offset_y: state.profile.offsetY || 0,
+      background_type: state.background.type || 'default',
+      background_value: state.background.value || '',
+      updated_at: new Date().toISOString()
+    });
+    if (error) { console.error(error); alert('Could not save settings: ' + error.message); }
+  }
+  const persistProfileDebounced = debounce(persistProfile, 500);
+
   function initSettingsUI() {
     settingName.value = state.profile.name || '';
-    if (state.background.type === 'custom' && state.background.value && !state.background.value.startsWith('data:')) {
-      settingBgUrl.value = state.background.value;
-    }
-    if (state.profile.photo) {
-      if (avatarPreviewImg.getAttribute('src') !== state.profile.photo) {
-        avatarPreviewImg.src = state.profile.photo;
-      }
+    settingBgUrl.value = (state.background.type === 'custom' && isExternalUrl(state.background.value))
+      ? state.background.value : '';
+    const src = mediaUrl(state.profile.photo);
+    if (src) {
+      if (avatarPreviewImg.getAttribute('src') !== src) avatarPreviewImg.src = src;
       avatarEditorWrap.classList.add('show');
+    } else {
+      avatarEditorWrap.classList.remove('show');
     }
     avatarZoom.value = state.profile.zoom || 100;
   }
 
   settingName.addEventListener('input', () => {
     state.profile.name = settingName.value;
-    save();
     renderProfile();
+    persistProfileDebounced();
   });
 
   settingBgFile.addEventListener('change', async () => {
     const file = settingBgFile.files && settingBgFile.files[0];
     if (!file) return;
     try {
-      const dataUrl = await resizeImageFile(file, 1800, 0.82);
-      state.background = { type: 'custom', value: dataUrl };
+      const blob = await resizeImageFile(file, 1800, 0.82);
+      const path = await uploadMedia(blob, 'background');
+      state.background = { type: 'custom', value: path };
       settingBgUrl.value = '';
-      save();
       renderBackground();
+      await persistProfile();
     } catch (err) {
       alert('Could not process the background photo: ' + err.message);
     }
   });
 
-  settingBgUrl.addEventListener('keydown', (e) => {
+  settingBgUrl.addEventListener('keydown', async (e) => {
     if (e.key !== 'Enter') return;
     e.preventDefault();
     const url = settingBgUrl.value.trim();
     if (!url) return;
     state.background = { type: 'custom', value: url };
     settingBgFile.value = '';
-    save();
     renderBackground();
+    await persistProfile();
   });
 
-  settingBgReset.addEventListener('click', () => {
+  settingBgReset.addEventListener('click', async () => {
     state.background = { type: 'default', value: '' };
     settingBgUrl.value = '';
     settingBgFile.value = '';
-    save();
     renderBackground();
+    await persistProfile();
   });
 
   settingAvatarFile.addEventListener('change', async () => {
     const file = settingAvatarFile.files && settingAvatarFile.files[0];
     if (!file) return;
     try {
-      const dataUrl = await resizeImageFile(file, 600, 0.85);
-      state.profile.photo = dataUrl;
+      const blob = await resizeImageFile(file, 600, 0.85);
+      const path = await uploadMedia(blob, 'avatar');
+      state.profile.photo = path;
       state.profile.zoom = 100;
       state.profile.offsetX = 0;
       state.profile.offsetY = 0;
       avatarZoom.value = 100;
-      avatarPreviewImg.src = dataUrl;
       avatarEditorWrap.classList.add('show');
-      save();
       renderProfile();
+      await persistProfile();
     } catch (err) {
       alert('Could not process the profile photo: ' + err.message);
     }
@@ -748,7 +806,6 @@
 
   avatarZoom.addEventListener('input', () => {
     state.profile.zoom = parseInt(avatarZoom.value, 10);
-    // re-clamp the existing offset against the new zoom level
     const natW = avatarPreviewImg.naturalWidth;
     const natH = avatarPreviewImg.naturalHeight;
     const boxW = avatarPreviewFrame.clientWidth;
@@ -759,15 +816,15 @@
       state.profile.offsetX = layout.clampedOffX;
       state.profile.offsetY = layout.clampedOffY;
     }
-    save();
     renderProfile();
+    persistProfileDebounced();
   });
 
   avatarPosReset.addEventListener('click', () => {
     state.profile.offsetX = 0;
     state.profile.offsetY = 0;
-    save();
     renderProfile();
+    persistProfile();
   });
 
   // ---- Drag-to-reposition on the avatar preview ----
@@ -800,16 +857,69 @@
     state.profile.offsetY = layout.clampedOffY;
     renderProfile();
   });
-  function endAvatarDrag(e) {
+  function endAvatarDrag() {
     if (!avatarDrag) return;
     avatarDrag = null;
     avatarPreviewFrame.classList.remove('dragging');
-    save();
+    persistProfile();
   }
   avatarPreviewFrame.addEventListener('pointerup', endAvatarDrag);
   avatarPreviewFrame.addEventListener('pointercancel', endAvatarDrag);
 
-  // ================= INIT =================
+  // ================= DATA LOADING =================
+  function mapTodoRow(r) { return { id: r.id, text: r.text, date: r.date, done: r.done, createdAt: new Date(r.created_at).getTime() }; }
+  function mapHabitRow(r) { return { id: r.id, name: r.name, goalDays: r.goal_days, log: r.log || {}, createdAt: new Date(r.created_at).getTime() }; }
+  function mapArchiveRow(r) { return { id: r.id, title: r.title, year: r.year, poster: r.poster, tmdbId: r.tmdb_id, status: r.status, rating: r.rating, memo: r.memo, createdAt: new Date(r.created_at).getTime() }; }
+  function mapDiaryRow(r) { return { id: r.id, photos: r.photos || [], text: r.text, date: r.date, createdAt: new Date(r.created_at).getTime() }; }
+
+  async function loadAllData() {
+    let { data: profileRow, error: profileErr } = await supabaseClient
+      .from('profiles').select('*').eq('user_id', currentUser.id).maybeSingle();
+    if (profileErr) throw profileErr;
+    if (!profileRow) {
+      const { data: created, error: createErr } = await supabaseClient
+        .from('profiles').insert({ user_id: currentUser.id }).select().single();
+      if (createErr) throw createErr;
+      profileRow = created;
+    }
+    state.profile = {
+      name: profileRow.name || '',
+      photo: profileRow.photo_path || '',
+      zoom: profileRow.avatar_zoom || 100,
+      offsetX: profileRow.avatar_offset_x || 0,
+      offsetY: profileRow.avatar_offset_y || 0
+    };
+    state.background = {
+      type: profileRow.background_type || 'default',
+      value: profileRow.background_value || ''
+    };
+
+    const [todosRes, habitsRes, archiveRes, diaryRes] = await Promise.all([
+      supabaseClient.from('todos').select('*').order('created_at', { ascending: false }),
+      supabaseClient.from('habits').select('*').order('created_at', { ascending: false }),
+      supabaseClient.from('archive_items').select('*').order('created_at', { ascending: false }),
+      supabaseClient.from('diary_entries').select('*').order('created_at', { ascending: false })
+    ]);
+    if (todosRes.error) throw todosRes.error;
+    if (habitsRes.error) throw habitsRes.error;
+    if (archiveRes.error) throw archiveRes.error;
+    if (diaryRes.error) throw diaryRes.error;
+
+    state.todos = (todosRes.data || []).map(mapTodoRow);
+    state.habits = (habitsRes.data || []).map(mapHabitRow);
+    state.archive = { movies: [], series: [] };
+    (archiveRes.data || []).forEach((r) => {
+      if (state.archive[r.category]) state.archive[r.category].push(mapArchiveRow(r));
+    });
+    state.diary = (diaryRes.data || []).map(mapDiaryRow);
+
+    const paths = [];
+    if (state.profile.photo) paths.push(state.profile.photo);
+    if (state.background.type === 'custom' && state.background.value) paths.push(state.background.value);
+    state.diary.forEach((d) => (d.photos || []).forEach((p) => paths.push(p)));
+    await resolveMediaUrls(paths);
+  }
+
   function renderAll() {
     renderProfile();
     renderBackground();
@@ -820,5 +930,73 @@
     initSettingsUI();
   }
 
-  renderAll();
+  // ================= AUTH =================
+  const authGate = document.getElementById('authGate');
+  const loadingOverlay = document.getElementById('loadingOverlay');
+  const appRoot = document.getElementById('appRoot');
+  const loginForm = document.getElementById('loginForm');
+  const loginEmail = document.getElementById('loginEmail');
+  const loginPassword = document.getElementById('loginPassword');
+  const loginError = document.getElementById('loginError');
+  const loginSubmit = document.getElementById('loginSubmit');
+  const logoutBtn = document.getElementById('logoutBtn');
+
+  let currentUser = null;
+
+  function showAuthGate(message) {
+    authGate.classList.add('show');
+    loadingOverlay.classList.remove('show');
+    appRoot.style.display = 'none';
+    loginError.textContent = message || '';
+  }
+  function showLoading() {
+    loadingOverlay.classList.add('show');
+    authGate.classList.remove('show');
+  }
+  function showApp() {
+    loadingOverlay.classList.remove('show');
+    authGate.classList.remove('show');
+    appRoot.style.display = 'flex';
+  }
+
+  loginForm.addEventListener('submit', async (e) => {
+    e.preventDefault();
+    loginError.textContent = '';
+    loginSubmit.disabled = true;
+    loginSubmit.textContent = 'Signing in…';
+    const { error } = await supabaseClient.auth.signInWithPassword({
+      email: loginEmail.value.trim(),
+      password: loginPassword.value
+    });
+    loginSubmit.disabled = false;
+    loginSubmit.textContent = 'Sign In';
+    if (error) {
+      loginError.textContent = error.message;
+    } else {
+      loginPassword.value = '';
+    }
+  });
+
+  logoutBtn.addEventListener('click', async () => {
+    await supabaseClient.auth.signOut();
+  });
+
+  supabaseClient.auth.onAuthStateChange((event, session) => {
+    if (event === 'SIGNED_OUT' || !session) {
+      currentUser = null;
+      showAuthGate();
+      return;
+    }
+    const isNewSignIn = !currentUser || currentUser.id !== session.user.id;
+    currentUser = session.user;
+    if (!isNewSignIn) return; // token refresh etc. — no need to reload data
+
+    showLoading();
+    loadAllData()
+      .then(() => { renderAll(); showApp(); })
+      .catch((err) => {
+        console.error(err);
+        showAuthGate('Failed to load your data: ' + err.message);
+      });
+  });
 })();

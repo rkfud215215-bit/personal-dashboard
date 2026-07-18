@@ -10,7 +10,24 @@
 
 <div id="bgLayer" class="default-bg"></div>
 
-<div class="app">
+<!-- AUTH GATE -->
+<div id="authGate" class="auth-gate">
+  <form id="loginForm" class="auth-card glass">
+    <h2>Personal Dashboard</h2>
+    <p class="auth-hint">Sign in to view your private dashboard.</p>
+    <input type="email" id="loginEmail" placeholder="Email" autocomplete="username" required>
+    <input type="password" id="loginPassword" placeholder="Password" autocomplete="current-password" required>
+    <button type="submit" class="btn" id="loginSubmit">Sign In</button>
+    <p id="loginError" class="auth-error"></p>
+  </form>
+</div>
+
+<!-- LOADING OVERLAY -->
+<div id="loadingOverlay" class="loading-overlay show">
+  <div class="loading-spinner"></div>
+</div>
+
+<div class="app" id="appRoot" style="display:none;">
 
   <aside class="sidebar glass">
     <div class="profile">
@@ -39,7 +56,9 @@
       </button>
     </nav>
 
-    <div class="sidebar-footer">Personal Dashboard</div>
+    <div class="sidebar-footer">
+      <button type="button" id="logoutBtn" class="btn-secondary btn-logout">Log Out</button>
+    </div>
   </aside>
 
   <main class="content">
@@ -118,10 +137,10 @@
       <form id="diaryForm" class="inline-form diary-form">
         <div class="diary-form-row">
           <label class="file-label">
-            📷 Choose Photo
-            <input type="file" id="diaryFile" accept="image/*">
+            📷 Choose Photos
+            <input type="file" id="diaryFile" accept="image/*" multiple>
           </label>
-          <input type="text" id="diaryUrl" placeholder="Or enter an image URL">
+          <input type="text" id="diaryUrl" placeholder="Or add an image URL">
           <input type="date" id="diaryDate">
         </div>
         <textarea id="diaryText" placeholder="Write about your day" required maxlength="500"></textarea>
@@ -176,6 +195,7 @@
   </main>
 </div>
 
+<script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2/dist/umd/supabase.js"></script>
 <script src="js/script.js"></script>
 </body>
 </html>
