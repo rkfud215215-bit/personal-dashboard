@@ -118,6 +118,7 @@ body{
   left:0;
   max-width:none;
   display:none;
+  transform-origin:0 0;
   will-change: transform;
 }
 .avatar.has-photo img{ display:block; }
@@ -871,6 +872,7 @@ textarea{
   max-width:none;
   user-select:none;
   -webkit-user-drag:none;
+  transform-origin:0 0;
   will-change: transform;
 }
 .avatar-controls{
