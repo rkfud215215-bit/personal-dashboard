@@ -188,9 +188,13 @@
     if (src) {
       if (avatarImg.getAttribute('src') !== src) avatarImg.src = src;
       avatarWrap.classList.add('has-photo');
+      if (avatarPreviewImg.getAttribute('src') !== src) avatarPreviewImg.src = src;
+      avatarEditorWrap.classList.add('show');
     } else {
       avatarImg.removeAttribute('src');
       avatarWrap.classList.remove('has-photo');
+      avatarPreviewImg.removeAttribute('src');
+      avatarEditorWrap.classList.remove('show');
     }
     layoutAllAvatars();
   }
@@ -732,16 +736,11 @@
   const persistProfileDebounced = debounce(persistProfile, 500);
 
   function initSettingsUI() {
+    // avatar preview/visibility is kept in sync by renderProfile(), which
+    // always runs before this in renderAll() — nothing to duplicate here.
     settingName.value = state.profile.name || '';
     settingBgUrl.value = (state.background.type === 'custom' && isExternalUrl(state.background.value))
       ? state.background.value : '';
-    const src = mediaUrl(state.profile.photo);
-    if (src) {
-      if (avatarPreviewImg.getAttribute('src') !== src) avatarPreviewImg.src = src;
-      avatarEditorWrap.classList.add('show');
-    } else {
-      avatarEditorWrap.classList.remove('show');
-    }
     avatarZoom.value = state.profile.zoom || 100;
   }
 
@@ -796,7 +795,6 @@
       state.profile.offsetX = 0;
       state.profile.offsetY = 0;
       avatarZoom.value = 100;
-      avatarEditorWrap.classList.add('show');
       renderProfile();
       await persistProfile();
     } catch (err) {
